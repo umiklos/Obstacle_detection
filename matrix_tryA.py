@@ -182,6 +182,8 @@ def linepub():
 
     topic = 'obstacle_line'
     publisher = rospy.Publisher(topic, MarkerArray,queue_size=2)
+    topic2='obstacle_center'
+    publisher2 = rospy.Publisher(topic2, Marker,queue_size=2)
     rate=rospy.Rate(2)
     #rospy.init_node('rviz_markers')
 
@@ -212,6 +214,19 @@ def linepub():
     marker2.color.g = 255.0
     marker2.id=1
 
+    marker3 = Marker()
+    marker3.header.frame_id = "/base_link"
+    marker3.type = marker3.SPHERE
+    marker3.action = marker3.ADD
+    marker3.scale.x = 0.1
+    marker3.scale.y = 0.1
+    marker3.scale.z = 0.1
+    marker3.color.a = 1.0
+    marker3.color.r = 255.0
+    marker3.color.b = 0.0
+    marker3.color.g = 165.0
+    
+
     while not rospy.is_shutdown():
         
 
@@ -228,66 +243,22 @@ def linepub():
             marker2.pose.position.y=sc.fya[1]
             marker2.pose.position.z=0
 
+            marker3.pose.position.x=sc.Cx
+            marker3.pose.position.y=sc.Cy
+            marker3.pose.position.z=0
+            #print(marker3)
             markerArray.markers.append(marker1)
             
             markerArray.markers.append(marker2)
 
             publisher.publish(markerArray)
+            publisher2.publish(marker3)
             
             
             
         rate.sleep()
 
-        
-       
 
-
-
-
-                
-
-            
-
-
-"""
-def centerpub():  
-    cp=ScanSubscriber()  
-    rospy.init_node("listener", anonymous=True)    
-    scan_sub = rospy.Subscriber("/scan", senmsg.LaserScan,cp.scanCallBack)
-
-    topic = 'obstacle_center'
-    publisher = rospy.Publisher(topic, Marker,queue_size=1)
-    rate=rospy.Rate(1)
-    #rospy.init_node('rviz_markers')
-
-    markerA = Marker()
-
-    while not rospy.is_shutdown():
-        marker = Marker()
-        marker.header.frame_id = "/base_link"
-        marker.type = marker.SPHERE
-        marker.action = marker.ADD
-        marker.scale.x = 0.5
-        marker.scale.y = 0.5
-        marker.scale.z = 0.5
-        marker.color.a = 1.0
-        marker.color.r = 0.0
-        marker.color.b = 255.0
-        marker.color.g = 0.0
-
-        marker.lifetime= rospy.Duration(0)
-        marker.pose.position.x=cp.Cx
-        marker.pose.position.y=cp.Cy
-        marker.pose.position.z=0
-
-
-        markerA.marker.append(marker)
-        
-
-        publisher.publish(markerA)
-        print(marker)
-        rate.sleep()
-"""        
 
 if __name__ == '__main__':
     try:
