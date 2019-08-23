@@ -70,7 +70,7 @@ class ScanSubscriber():
             y1_wall_r=y2_wall_r
 
 
-        
+       # print(x1_wall_r,x2_wall_r,x3_wall_r)
         slope_R, intercept_R, rvalue_R, pvalue_R,stderr_R = linregress([x2_wall_r,x3_wall_r,x1_wall_r],[y2_wall_r,y3_wall_r,y1_wall_r])
         Y_Right_wall=slope_R*self.xy_masked[:,0]+intercept_R 
 
@@ -79,8 +79,8 @@ class ScanSubscriber():
         slope_L, intercept_L,rvalue_L, pvalue_L,stderr_L= linregress([x1_wall_l,x3_wall_l,x2_wall_l],[y1_wall_l,y3_wall_l,y2_wall_l])
         Y_Left_wall=slope_L*self.xy_masked[:,0]+intercept_L
         
-        y_mask_R=self.xy_masked[:,1] > Y_Right_wall+0.05  
-        y_mask_L=self.xy_masked[:,1] < Y_Left_wall-0.05
+        y_mask_R=self.xy_masked[:,1] > Y_Right_wall+0.1  
+        y_mask_L=self.xy_masked[:,1] < Y_Left_wall-0.1
 
         y_mask=np.logical_and(y_mask_L,y_mask_R)
 
@@ -91,14 +91,15 @@ class ScanSubscriber():
             
             scaler=StandardScaler()
             X_scaled=scaler.fit_transform(self.xy_y_masked)
-            dbscan=DBSCAN(eps=0.3,min_samples=5).fit(self.xy_y_masked)
+            dbscan=DBSCAN(eps=0.2,min_samples=5).fit(self.xy_y_masked)
             
 
             clusters=dbscan.fit_predict(X_scaled)
             cl=clusters
+            
             self.n_clusters=len(set(cl))-(1 if -1 in cl else 0)      
             merge = np.concatenate((np.reshape(cl, (-1, 1)), self.xy_y_masked), axis=1)
-        
+            #print(set(cl),self.n_clusters)
 
             self.ylist = []
             self.xlist = []
@@ -118,7 +119,11 @@ class ScanSubscriber():
                 
             ransac = linear_model.RANSACRegressor(max_trials=20,min_samples=2)
 
-            for j in range (1,self.xlist.size):
+            for j in range (0,len(self.xlist)):
+                
+                #print(self.xlist.shape)
+                    
+                #    print(self.xlist.size,len(self.xlist))
                 if len(self.xlist[j])> 2:                
                     diff=self.xlist[j].max()-self.xlist[j].min()
                     d=math.floor(math.log10(diff))
@@ -152,7 +157,7 @@ class ScanSubscriber():
 
         
             for k in range(len(sample_length)):
-                if sample_length[k,0] > 0.2 and sample_length[k,0] < 0.75:
+                if sample_length[k,0] > 0.4 and sample_length[k,0] < 0.75:
                     self.fx=LX_ransac[k,:]
                     self.fy=LY_ransac[k,:]   
 
