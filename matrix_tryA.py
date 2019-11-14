@@ -70,7 +70,7 @@ class ScanSubscriber():
             y1_wall_r=y2_wall_r
 
 
-       # print(x1_wall_r,x2_wall_r,x3_wall_r)
+        #print(x1_wall_r,x2_wall_r,x3_wall_r)
         slope_R, intercept_R, rvalue_R, pvalue_R,stderr_R = linregress([x2_wall_r,x3_wall_r,x1_wall_r],[y2_wall_r,y3_wall_r,y1_wall_r])
         Y_Right_wall=slope_R*self.xy_masked[:,0]+intercept_R 
 
@@ -91,7 +91,7 @@ class ScanSubscriber():
             
             scaler=StandardScaler()
             X_scaled=scaler.fit_transform(self.xy_y_masked)
-            dbscan=DBSCAN(eps=0.2,min_samples=5).fit(self.xy_y_masked)
+            dbscan=DBSCAN(eps=0.4,min_samples=5).fit(self.xy_y_masked)
             
 
             clusters=dbscan.fit_predict(X_scaled)
@@ -117,7 +117,7 @@ class ScanSubscriber():
             LX_ransac = []
             LY_ransac = []
                 
-            ransac = linear_model.RANSACRegressor(max_trials=20,min_samples=2)
+            ransac = linear_model.RANSACRegressor(max_trials=50,min_samples=2)
 
             for j in range (0,len(self.xlist)):
                 
@@ -157,7 +157,7 @@ class ScanSubscriber():
 
         
             for k in range(len(sample_length)):
-                if sample_length[k,0] > 0.4 and sample_length[k,0] < 0.75:
+                if sample_length[k,0] > 2.8 and sample_length[k,0] < 3:
                     self.fx=LX_ransac[k,:]
                     self.fy=LY_ransac[k,:]   
 
@@ -184,7 +184,8 @@ def linepub():
     rospy.init_node("rviz_marker", anonymous=True)  
     sc=ScanSubscriber()  
     scan_sub = rospy.Subscriber("/scan", senmsg.LaserScan,sc.scanCallBack)
-
+    #rospy.spin()
+    
     topic = 'obstacle_line'
     publisher = rospy.Publisher(topic, MarkerArray,queue_size=2)
     topic2='obstacle_center'
@@ -194,7 +195,7 @@ def linepub():
 
     markerArray= MarkerArray()
     marker1 = Marker()
-    marker1.header.frame_id = "/base_link"
+    marker1.header.frame_id = "/laser"
     marker1.type = marker1.SPHERE
     marker1.action = marker1.ADD
     marker1.scale.x = 0.1
@@ -205,9 +206,13 @@ def linepub():
     marker1.color.b = 0.0
     marker1.color.g = 255.0
     marker1.id=0
+    marker1.pose.orientation.x = 0.0
+    marker1.pose.orientation.y = 0.0
+    marker1.pose.orientation.z = 0.0
+    marker1.pose.orientation.w = 1.0
     
     marker2 = Marker()
-    marker2.header.frame_id = "/base_link"
+    marker2.header.frame_id = "/laser"
     marker2.type = marker2.SPHERE
     marker2.action = marker2.ADD
     marker2.scale.x = 0.1
@@ -218,9 +223,13 @@ def linepub():
     marker2.color.b = 0.0
     marker2.color.g = 255.0
     marker2.id=1
+    marker2.pose.orientation.x = 0.0
+    marker2.pose.orientation.y = 0.0
+    marker2.pose.orientation.z = 0.0
+    marker2.pose.orientation.w = 1.0
 
     marker3 = Marker()
-    marker3.header.frame_id = "/base_link"
+    marker3.header.frame_id = "/laser"
     marker3.type = marker3.SPHERE
     marker3.action = marker3.ADD
     marker3.scale.x = 0.1
@@ -230,6 +239,10 @@ def linepub():
     marker3.color.r = 255.0
     marker3.color.b = 0.0
     marker3.color.g = 165.0
+    marker3.pose.orientation.x = 0.0
+    marker3.pose.orientation.y = 0.0
+    marker3.pose.orientation.z = 0.0
+    marker3.pose.orientation.w = 1.0
     
 
     while not rospy.is_shutdown():
@@ -264,7 +277,7 @@ def linepub():
         rate.sleep()
 
 
-
+    
 if __name__ == '__main__':
     try:
         linepub()
