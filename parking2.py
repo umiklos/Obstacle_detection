@@ -33,19 +33,7 @@ class ScanSubscriber():
         self.fxa=None
         self.fya=None
         self.yaw=None
-
-    def rotate(self,xy, radians, origin=(0, 0)):    
-        x, y = xy
-        offset_x, offset_y = origin
-        adjusted_x = (x - offset_x)
-        adjusted_y = (y - offset_y)
-        cos_rad = math.cos(radians)
-        sin_rad = math.sin(radians)
-        qx = offset_x + cos_rad * adjusted_x + sin_rad * adjusted_y
-        qy = offset_y + -sin_rad * adjusted_x + cos_rad * adjusted_y
-
-        return qx, qy
-
+        self.vehicle_x=None
 
     def tf_subscriber(self):
         self.tfBuffer = tf2_ros.Buffer()
@@ -55,7 +43,7 @@ class ScanSubscriber():
         rate = rospy.Rate(2)
         while not rospy.is_shutdown():
             try:
-                trans = self.tfBuffer.lookup_transform('map', 'base_link', rospy.Time())
+                trans = self.tfBuffer.lookup_transform( 'map','base_link', rospy.Time())
                 [roll,pitch,yaw]=tf_conversions.transformations.euler_from_quaternion([trans.transform.rotation.x, trans.transform.rotation.y,trans.transform.rotation.z,trans.transform.rotation.w])    
                 self.vehicle_x=trans.transform.translation.x
                 self.vehicle_y=trans.transform.translation.y
@@ -84,212 +72,210 @@ class ScanSubscriber():
         y[y== inf]=0
         y_a=y[np.nonzero(y)]
         xy=np.column_stack((x_a,y_a))
-        #x_mask=xy[:,0]>-0.22
-        #self.xy_masked=xy[x_mask]
+        x_mask=xy[:,0]>0
+        self.xy_masked=xy[x_mask]
         
-        
-
-          
-        if self.yaw is not None:
-            
-
-            y_zero=(-self.yaw)*3
-            
-            plv=[0,0],[3,y_zero]
-            plv=np.array(plv)
-
-            trans_matrix2=np.array([[np.cos(-self.yaw+(math.pi/2)), np.sin(-self.yaw+(math.pi/2))], [-np.sin(-self.yaw+(math.pi/2)), np.cos(-self.yaw+(math.pi/2))]])
-            plv2=np.dot(plv,trans_matrix2)
-            trans_matrix3=np.array([[np.cos(-self.yaw-(math.pi/2)), np.sin(-self.yaw-(math.pi/2))], [-np.sin(-self.yaw-(math.pi/2)), np.cos(-self.yaw-(math.pi/2))]])
-            plv3=np.dot(plv,trans_matrix3)
-
-            slope_null,intercept_null,_,_,_=linregress((plv2[1,0],((plv2[1,0]+plv3[1,0])/2),plv3[1,0]),(plv2[1,1],((plv2[1,1]+plv3[1,1])/2),plv3[1,1]))
-            
-            x_car=(-intercept_null+xy[:,1])/slope_null
-
-            x_mask=xy[:,0]>x_car
-
-            self.xy_masked=xy[x_mask]
-
+        if self.yaw is not None and self.yaw!=0:
+                
             trans_matrix=np.array([[np.cos(-self.yaw), np.sin(-self.yaw)], [-np.sin(-self.yaw), np.cos(-self.yaw)]])
+            y_zero=(-self.yaw)*3
 
-            self.a=np.dot(self.xy_masked,trans_matrix)
-            
 
-            plt.scatter(self.a[:,0],self.a[:,1],c='r')
         
+        x_wall_r,y_wall_r=[],[]
         
+        for i in range(60):
+            #x1_wall_r=np.cos(self.angles[i])*self.scan_ranges[i]
+            #y1_wall_r=np.sin(self.angles[i])*self.scan_ranges[i]
+            x1_wall_r=self.xy_masked[i,0]
+            y1_wall_r=self.xy_masked[i,1]
+            x_wall_r.append(x1_wall_r)
+            y_wall_r.append(y1_wall_r)
+        x_wall_r=np.array(x_wall_r)
+        y_wall_r=np.array(y_wall_r)
 
-            x_wall_r,y_wall_r=[],[]
-        
-            for i in range(60):
-                #x1_wall_r=np.cos(self.angles[i])*self.scan_ranges[i]
-                #y1_wall_r=np.sin(self.angles[i])*self.scan_ranges[i]
-                x1_wall_r=self.a[i,0]
-                y1_wall_r=self.a[i,1]
-                x_wall_r.append(x1_wall_r)
-                y_wall_r.append(y1_wall_r)
-            x_wall_r=np.array(x_wall_r)
-            y_wall_r=np.array(y_wall_r)
-
-            x_wall_l,y_wall_l=[],[]
-        
-            for i in reversed(range(-60,0)):
-                #x1_wall_l=np.cos(self.angles[i])*self.scan_ranges[i]
-                #y1_wall_l=np.sin(self.angles[i])*self.scan_ranges[i]
-                x1_wall_l=self.a[i,0]
-                y1_wall_l=self.a[i,1]
-                x_wall_l.append(x1_wall_l)
-                y_wall_l.append(y1_wall_l)
-            x_wall_l=np.array(x_wall_l)
-            y_wall_l=np.array(y_wall_l)
+        x_wall_l,y_wall_l=[],[]
+    
+        for i in reversed(range(-60,0)):
+            #x1_wall_l=np.cos(self.angles[i])*self.scan_ranges[i]
+            #y1_wall_l=np.sin(self.angles[i])*self.scan_ranges[i]
+            x1_wall_l=self.xy_masked[i,0]
+            y1_wall_l=self.xy_masked[i,1]
+            x_wall_l.append(x1_wall_l)
+            y_wall_l.append(y1_wall_l)
+        x_wall_l=np.array(x_wall_l)
+        y_wall_l=np.array(y_wall_l)
 
 
-            slope_R, intercept_R, _,_,_ = linregress([x_wall_r,y_wall_r])
-            Y_Right_wall=slope_R*self.a[:,0]+intercept_R 
+        slope_R, intercept_R, _,_,_ = linregress([x_wall_r,y_wall_r])
+        Y_Right_wall=slope_R*self.xy_masked[:,0]+intercept_R 
 
-            slope_L, intercept_L,_,_,_= linregress([x_wall_l,y_wall_l])
-            Y_Left_wall=slope_L*self.a[:,0]+intercept_L
-            
-            y_mask_R=self.a[:,1] > Y_Right_wall+0.1  
-            y_mask_L=self.a[:,1] < Y_Left_wall-0.1
+        slope_L, intercept_L,_,_,_= linregress([x_wall_l,y_wall_l])
+        Y_Left_wall=slope_L*self.xy_masked[:,0]+intercept_L
 
-            y_mask=np.logical_and(y_mask_L,y_mask_R)
+        y_mask_R=self.xy_masked[:,1] > Y_Right_wall+0.1  
+        y_mask_L=self.xy_masked[:,1] < Y_Left_wall-0.1
 
-            self.xy_y_masked=self.xy_masked[y_mask] 
-            
-           
-            
+        y_mask=np.logical_and(y_mask_L,y_mask_R)
 
-           
-
-
-
-            """
-            
-
-            x,y=self.rotate([self.xy_masked[:,0][-1],y_null[-1]],10,(self.xy_masked[:,0][0],y_null[0]))
-            plvx=[0,x]
-            plvy=[0,y]
-
+        self.xy_y_masked=self.xy_masked[y_mask] 
 
             
-            
-            #trans_matrix=np.array([[np.cos(self.yaw), np.sin(self.yaw)], [-np.sin(self.yaw), np.cos(self.yaw)]])
-            
-            #a=np.dot(y_null,trans_matrix)
-            """
-            
-            plt.scatter(self.xy_masked[:,0],self.xy_masked[:,1])
-            
-            
-            plt.plot(self.a[:,0],Y_Left_wall,color='r')
-            plt.plot(self.a[:,0],Y_Right_wall,color='g')
-            
-            
-            plt.plot(plv[:,0],plv[:,1],c='m')
-            plt.plot(plv2[:,0],plv2[:,1])
-            plt.plot(plv3[:,0],plv3[:,1])
+
+        if self.vehicle_x<0.3 and self.yaw!=0 and self.yaw is not None:
+                Y_Right_wall=np.dot([self.xy_masked[:,0],Y_Right_wall],trans_matrix)
+                Y_Left_wall=np.dot([self.xy_masked[:,0],Y_Left_wall],trans_matrix)
 
             
-            plt.show()
-            
-            
-        #def clustering(self):
-            if self.xy_y_masked.shape[0] > 0:
+                """
+                plv=[0,0],[3,y_zero]
+                plv=np.array(plv)
+
+                trans_matrix2=np.array([[np.cos(-self.yaw+(math.pi/2)), np.sin(-self.yaw+(math.pi/2))], [-np.sin(-self.yaw+(math.pi/2)), np.cos(-self.yaw+(math.pi/2))]])
+                plv2=np.dot(plv,trans_matrix2)
+                trans_matrix3=np.array([[np.cos(-self.yaw-(math.pi/2)), np.sin(-self.yaw-(math.pi/2))], [-np.sin(-self.yaw-(math.pi/2)), np.cos(-self.yaw-(math.pi/2))]])
+                plv3=np.dot(plv,trans_matrix3)
+
+                slope_null,intercept_null,_,_,_=linregress((plv2[1,0],((plv2[1,0]+plv3[1,0])/2),plv3[1,0]),(plv2[1,1],((plv2[1,1]+plv3[1,1])/2),plv3[1,1]))
                 
-                scaler=StandardScaler()
-                X_scaled=scaler.fit_transform(self.xy_y_masked)
-                dbscan=DBSCAN(eps=0.4,min_samples=5).fit(self.xy_y_masked)
+                #x_car=(-intercept_null+xy[:,1])/slope_null
+
+                #x_mask=xy[:,0]>x_car
+
+                #self.xy_masked=xy[x_mask]
+
                 
 
-                clusters=dbscan.fit_predict(X_scaled)
-                cl=clusters
+                #self.a=np.dot(self.xy_masked,trans_matrix)  
                 
-                self.n_clusters=len(set(cl))-(1 if -1 in cl else 0)      
-                merge = np.concatenate((np.reshape(cl, (-1, 1)), self.xy_y_masked), axis=1)
-                #print(set(cl),self.n_clusters)
 
-                self.ylist = []
-                self.xlist = []
-                for i in range(int(min(merge[:,0])), int(max(merge[:,0]+1))):
-                    tol = np.where(merge[:,0] == i)[0][0]
-                    ig = np.where(merge[:,0] == i)[0][-1]
-                    self.xlist.append(merge[tol:ig+1, 1:2])
-                    self.ylist.append(merge[tol:ig+1, 2:3])
-
-                self.xlist=np.array(self.xlist)
-                self.ylist=np.array(self.ylist)
-
+                #plt.scatter(self.a[:,0],self.a[:,1],c='r')
+                """
             
-        
-                LX_ransac = []
-                LY_ransac = []
-                    
-                ransac = linear_model.RANSACRegressor(max_trials=50,min_samples=2)
 
-                for j in range (0,len(self.xlist)):
-                    
-                    
-                        
-                    
-                    if len(self.xlist[j])> 2:                
-                        diff=self.xlist[j].max()-self.xlist[j].min()
-                        d=math.floor(math.log10(diff))
-                        ransac.fit(self.xlist[j],self.ylist[j])
-                        inlier_mask = ransac.inlier_mask_
+                
+                
+                y_mask_R=self.xy_masked[:,1] > Y_Right_wall+0.1  
+                y_mask_L=self.xy_masked[:,1] < Y_Left_wall-0.1
+
+                y_mask=np.logical_and(y_mask_L,y_mask_R)
+
+                self.xy_y_masked=self.xy_masked[y_mask] 
                         
 
-                        line_X = np.arange(self.xlist[j].min(), self.xlist[j].max(),diff-(10**(d-2)))[:, np.newaxis]
-                        LX_ransac.append(line_X)
-                    
 
-                        line_y_ransac = ransac.predict(line_X)
-                        LY_ransac.append(line_y_ransac)
-                        
-                                
-
-                LX_ransac=np.array(LX_ransac)    
-                LY_ransac=np.array(LY_ransac)   
-                
-                
-                sample_length=np.empty([len(LX_ransac),1])   
 
                 
-        
-        
-                for f in range (0,len(LX_ransac)):
-                    sample_length[f,0]=math.sqrt(((LX_ransac[f,0]-LX_ransac[f,1])**2)+(LY_ransac[f,0]-LY_ransac[f,1])**2)
-        
                 
-
-                self.fx=np.empty([2,0], dtype=float)
-                self.fy=np.empty([2,0],dtype=float)
 
             
-                for k in range(len(sample_length)):
-                    if sample_length[k,0] > 2.8 and sample_length[k,0] < 3:
-                        self.fx=LX_ransac[k,:]
-                        self.fy=LY_ransac[k,:]
+                
+                plt.scatter(self.xy_masked[:,0],self.xy_masked[:,1])
+                
+                
+                plt.plot(self.xy_masked[:,0],Y_Left_wall,color='r')
+                plt.plot(self.xy_masked[:,0],Y_Right_wall,color='g')
+                
+                
+                
+                plt.show()
+                
+                
+            #def clustering(self):
+                if self.xy_y_masked.shape[0] > 0:
+                    
+                    scaler=StandardScaler()
+                    X_scaled=scaler.fit_transform(self.xy_y_masked)
+                    dbscan=DBSCAN(eps=0.4,min_samples=5).fit(self.xy_y_masked)
                     
 
-                if self.fx.size > 0:
-                    self.fxa=np.array(self.fx, dtype=float) 
-                    self.fya=np.array(self.fy, dtype=float)
+                    clusters=dbscan.fit_predict(X_scaled)
+                    cl=clusters
                     
+                    self.n_clusters=len(set(cl))-(1 if -1 in cl else 0)      
+                    merge = np.concatenate((np.reshape(cl, (-1, 1)), self.xy_y_masked), axis=1)
+                    #print(set(cl),self.n_clusters)
 
-                if self.fx.shape[1] > 0:
-                    self.Cx=((self.fxa.max()-self.fxa.min())/2)+self.fxa.min()
-                    self.Cy=((self.fya.max()-self.fya.min())/2)+self.fya.min()
-                    
+                    self.ylist = []
+                    self.xlist = []
+                    for i in range(int(min(merge[:,0])), int(max(merge[:,0]+1))):
+                        tol = np.where(merge[:,0] == i)[0][0]
+                        ig = np.where(merge[:,0] == i)[0][-1]
+                        self.xlist.append(merge[tol:ig+1, 1:2])
+                        self.ylist.append(merge[tol:ig+1, 2:3])
 
-                    
-                    self.dist=math.sqrt((self.Cx**2)+(self.Cy**2))
-                    self.orient=math.tan(self.Cy/self.Cx)
-                    self.orient_d=math.degrees(self.orient)
-        #a_end=rospy.Time.now()
-        #print(a_end-a_start)   
+                    self.xlist=np.array(self.xlist)
+                    self.ylist=np.array(self.ylist)
+
+                
+            
+                    LX_ransac = []
+                    LY_ransac = []
                         
+                    ransac = linear_model.RANSACRegressor(max_trials=50,min_samples=2)
+
+                    for j in range (0,len(self.xlist)):
+                        
+                        
+                            
+                        
+                        if len(self.xlist[j])> 2:                
+                            diff=self.xlist[j].max()-self.xlist[j].min()
+                            d=math.floor(math.log10(diff))
+                            ransac.fit(self.xlist[j],self.ylist[j])
+                            inlier_mask = ransac.inlier_mask_
+                            
+
+                            line_X = np.arange(self.xlist[j].min(), self.xlist[j].max(),diff-(10**(d-2)))[:, np.newaxis]
+                            LX_ransac.append(line_X)
+                        
+
+                            line_y_ransac = ransac.predict(line_X)
+                            LY_ransac.append(line_y_ransac)
+                            
+                                    
+
+                    LX_ransac=np.array(LX_ransac)    
+                    LY_ransac=np.array(LY_ransac)   
+                    
+                    
+                    sample_length=np.empty([len(LX_ransac),1])   
+
+                    
+            
+            
+                    for f in range (0,len(LX_ransac)):
+                        sample_length[f,0]=math.sqrt(((LX_ransac[f,0]-LX_ransac[f,1])**2)+(LY_ransac[f,0]-LY_ransac[f,1])**2)
+            
+                    
+
+                    self.fx=np.empty([2,0], dtype=float)
+                    self.fy=np.empty([2,0],dtype=float)
+
+                
+                    for k in range(len(sample_length)):
+                        if sample_length[k,0] > 2.8 and sample_length[k,0] < 3:
+                            self.fx=LX_ransac[k,:]
+                            self.fy=LY_ransac[k,:]
+                        
+
+                    if self.fx.size > 0:
+                        self.fxa=np.array(self.fx, dtype=float) 
+                        self.fya=np.array(self.fy, dtype=float)
+                        
+
+                    if self.fx.shape[1] > 0:
+                        self.Cx=((self.fxa.max()-self.fxa.min())/2)+self.fxa.min()
+                        self.Cy=((self.fya.max()-self.fya.min())/2)+self.fya.min()
+                        
+
+                        
+                        self.dist=math.sqrt((self.Cx**2)+(self.Cy**2))
+                        self.orient=math.tan(self.Cy/self.Cx)
+                        self.orient_d=math.degrees(self.orient)
+            #a_end=rospy.Time.now()
+            #print(a_end-a_start)   
+                            
        
 def linepub():  
       
