@@ -59,10 +59,10 @@ class ScanSubscriber():
         x_wall_r,y_wall_r=[],[]
     
         for i in range(60):
-            #x1_wall_r=np.cos(self.angles[i])*self.scan_ranges[i]
-            #y1_wall_r=np.sin(self.angles[i])*self.scan_ranges[i]
-            x1_wall_r=self.xy_masked[i,0]
-            y1_wall_r=self.xy_masked[i,1]
+            x1_wall_r=np.cos(self.angles[i])*self.scan_ranges[i]
+            y1_wall_r=np.sin(self.angles[i])*self.scan_ranges[i]
+            #x1_wall_r=self.xy_masked[i,0]
+            #y1_wall_r=self.xy_masked[i,1]
             x_wall_r.append(x1_wall_r)
             y_wall_r.append(y1_wall_r)
         x_wall_r=np.array(x_wall_r)
@@ -71,10 +71,10 @@ class ScanSubscriber():
         x_wall_l,y_wall_l=[],[]
     
         for i in reversed(range(-60,0)):
-            #x1_wall_l=np.cos(self.angles[i])*self.scan_ranges[i]
-            #y1_wall_l=np.sin(self.angles[i])*self.scan_ranges[i]
-            x1_wall_l=self.xy_masked[i,0]
-            y1_wall_l=self.xy_masked[i,1]
+            x1_wall_l=np.cos(self.angles[i])*self.scan_ranges[i]
+            y1_wall_l=np.sin(self.angles[i])*self.scan_ranges[i]
+            #x1_wall_l=self.xy_masked[i,0]
+            #y1_wall_l=self.xy_masked[i,1]
             x_wall_l.append(x1_wall_l)
             y_wall_l.append(y1_wall_l)
         x_wall_l=np.array(x_wall_l)
@@ -95,13 +95,14 @@ class ScanSubscriber():
         self.xy_y_masked=self.xy_masked[y_mask] 
         
 
-
+        """
         plt.scatter(self.xy_masked[:,0],self.xy_masked[:,1])
         
         plt.plot(self.xy_masked[:,0],Y_Left_wall,color='r')
         plt.plot(self.xy_masked[:,0],Y_Right_wall,color='g')
         
         plt.show()
+        """
         
     #def clustering(self):
         if self.xy_y_masked.shape[0] > 0:
@@ -180,7 +181,7 @@ class ScanSubscriber():
 
         
             for k in range(len(sample_length)):
-                if sample_length[k,0] > 2.8 and sample_length[k,0] < 3:
+                if sample_length[k,0] > 3.5 and sample_length[k,0] < 3.8:
                     self.fx=LX_ransac[k,:]
                     self.fy=LY_ransac[k,:]
                 
@@ -208,9 +209,9 @@ def linepub():
     rospy.init_node("rviz_marker", anonymous=True)  
     sc=ScanSubscriber()  
     scan_sub = rospy.Subscriber("/scan", senmsg.LaserScan,sc.scanCallBack)
-    rospy.spin()
+    #rospy.spin()
     
-    """
+    
     topic = 'obstacle_line'
     publisher = rospy.Publisher(topic, MarkerArray,queue_size=2)
     topic2='obstacle_center'
@@ -302,7 +303,7 @@ def linepub():
             
             
         rate.sleep()
-    """
+    
         
     
 if __name__ == '__main__':
