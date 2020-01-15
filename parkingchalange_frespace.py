@@ -10,13 +10,14 @@ import shapely.geometry as sg      # Point object
 import visualization_msgs.msg as vismsg
 import numpy as np
 from shapely import affinity
-from scipy.spatial import Voronoi
 from shapely.geometry import Point
 from sklearn import linear_model
 from scipy import stats
 import matplotlib.pyplot as plt
-#from sklearn.cluster import DBSCAN
-#from sklearn.preprocessing import StandardScaler
+
+
+offset_from_block=0.5    #### set parameter: how big tolerance we want from the block, the distance is in meter ####        
+
 
 free_space = None
 orient_line = None
@@ -32,6 +33,9 @@ h_cent=None
 line_length=None
 xblock=None
 yblock=None
+xcenter=None
+ycenter=None
+centerpoint=None
 
 
 class ScanSubscriber():
@@ -47,7 +51,7 @@ class ScanSubscriber():
         self.separators = []
 
     def scanCallBack(self,msg):
-        global free_space, orient_line, closest_node,ransac_pol,search_pol,right_sideline,left_sideline,smaller_polygon,block_point,block_dist,h_cent,line_length,yblock,xblock
+        global free_space, orient_line, closest_node,ransac_pol,search_pol,right_sideline,left_sideline,smaller_polygon,block_point,block_dist,h_cent,line_length,yblock,xblock,xcenter,ycenter,offset_from_block
         # define the slices ~ how many nodes (points) a polygon will have (don't worry later will be simlified with shapely simplify)
         slic = 40
         if len(self.angles) < 1: # if empty
@@ -152,12 +156,18 @@ class ScanSubscriber():
 
                     
                     if np.any(block_lines):
-                        line_length,block_point=self.block_linesCoordinate(block_lines)
+                        
+                        
+                        line_length,block_point,xcenter,ycenter=self.block_linesCoordinate(block_lines)
                         xblock,yblock=block_point.xy
+                        xcenter=np.array(xcenter)
+                        ycenter=np.array(ycenter)
+                        centerpoint=Point(xcenter[0],ycenter[0])
                         #print(xblock,yblock)
-                    
+                        #print(centerpoint.x,centerpoint.y)
                     #else: 
-                        #print("no vertical lines in the polygon")    
+                        #print("no vertical lines in the polygon") 
+                          
                 else:
                     rospy.logwarn("no goal")
 
@@ -167,8 +177,8 @@ class ScanSubscriber():
                          
 ########### near block#####################################            
             elif block_dist<3.5:
-                #block_dist=2.45
-                #middle_coords = np.array([[0,h_cent], [0.1, h_cent + 0.1 * orientation], [block_dist, h_cent + block_dist *orientation]])
+                
+                
                 crosslines,poly0,l0=self.nearblock_get_crosslines(free_space)           
                 mpoints=self.nearblock_get_intersectpoints(crosslines)
                 if len(mpoints)>2:
@@ -231,9 +241,13 @@ class ScanSubscriber():
                             
                             
                             if np.any(block_lines):
-                                line_length,block_point=self.block_linesCoordinate(block_lines)
+                                line_length,block_point,xcenter,ycenter=self.block_linesCoordinate(block_lines)
                                 xblock,yblock=block_point.xy
-                                #print(xblock,yblock)
+                                xcenter=np.array(xcenter)
+                                ycenter=np.array(ycenter)
+                                centerpoint=Point(xcenter[0],ycenter[0])
+                                #print(centerpoint.x,centerpoint.y)
+                                
                                 
                         else:
                             rospy.logwarn("no goal")
@@ -488,10 +502,12 @@ class ScanSubscriber():
         coords=np.column_stack((xj,yj))
         if len(coords)>1:
             lineb=sg.LineString((coords))
+            x_centerpoint,y_centerpoint=lineb.centroid.xy
             #xa,ya=lineb.xy
             length=lineb.length
-            return length,lineb
-            #return length,[[xa[0],ya[0]],[xa[-1],ya[-1]]]
+            return length,lineb,x_centerpoint,y_centerpoint
+
+            
 
     def nearblock_get_crosslines(self,free_space):
         xd,yd=free_space.exterior.xy
@@ -540,7 +556,7 @@ class ScanSubscriber():
         most_common_abs_val=most_common_val[np.argmax(ind)]
         interceptbl=mpoints[0,1]-(slopecommon*most_common_abs_val)
 
-        #slbl,interceptbl,_,_,_=stats.linregress(mpoints)
+        
 
         yend=np.arange(miny-1,maxy+1,0.2)
         x_end_l=(-interceptbl+yend)/slopecommon 
@@ -579,7 +595,7 @@ class ScanSubscriber():
 def linepub(): 
     rospy.init_node("rviz_marker", anonymous=True)  
     sc=ScanSubscriber()  
-    scan_sub = rospy.Subscriber("/scan", senmsg.LaserScan, sc.scanCallBack)
+    rospy.Subscriber("/scan", senmsg.LaserScan, sc.scanCallBack)
     
     pub_free = rospy.Publisher("free_space", vismsg.Marker, queue_size=1)
     pub_text = rospy.Publisher("free_space_text", vismsg.Marker, queue_size=1)
@@ -587,8 +603,8 @@ def linepub():
     pub_side = rospy.Publisher("side_points", vismsg.Marker, queue_size=1)
     pub_poly = rospy.Publisher("smaller_poly", vismsg.Marker, queue_size=1)
     pub_blockp=rospy.Publisher("block_points", vismsg.Marker, queue_size=1)
+    pub_centerpointb=rospy.Publisher("center_points/xy", geomsg.PointStamped, queue_size=1)
     
-    #pub_length = rospy.Publisher("line_length_text", vismsg.Marker, queue_size=1)
     rate=rospy.Rate(25)
     
     # mark_f - free space marker
@@ -614,21 +630,7 @@ def linepub():
     mark_t.color.a = 1.0 # 100% visibility
     mark_t.scale.z = 1.0
     mark_t.pose.orientation.w = 1.0
-    """
-    # mark_t - text marker
-    mark_l = vismsg.Marker()
-    mark_l.header.frame_id = "/laser"
-    mark_l.type = mark_l.TEXT_VIEW_FACING
-    mark_l.ns = "basic_shapes"
-    mark_l.color.r = mark_l.color.g = mark_l.color.b = 0.7
-    mark_l.color.a = 1.0 # 100% visibility
-    mark_l.scale.z = 1.0
-    mark_l.pose.orientation.w = 1.0
-    if block_dist is not None and h_cent is not None:
-        mark_l.pose.orientation.x=block_dist+2
-        mark_l.pose.orientation.y=h_cent
-        mark_l.pose.orientation.z=0
-    """
+    
 
 
     # mark_w - waypoint space marker
@@ -688,6 +690,8 @@ def linepub():
     mark_e.pose.orientation.x = mark_e.pose.orientation.y = mark_e.pose.orientation.z = 0.0
     mark_e.pose.orientation.w = 1.0
     mark_e.pose.position.x = mark_e.pose.position.y = mark_e.pose.position.z = 0.0
+
+
     
 
     while not rospy.is_shutdown():
@@ -727,20 +731,32 @@ def linepub():
                     p = geomsg.Point(); p.x = s[0]; p.y = s[1]; p.z = 0.0
                     mark_sm.points.append(p)
             
+            
             mark_e.points=[]
-            if block_point is not None and block_point is not [] and line_length<4:
+            if block_point is not None and block_point is not [] and line_length<4 and line_length>2:
                 for e in range(2):
                     p = geomsg.Point(); p.x = xblock[e]; p.y = yblock[e]; p.z = 0.0
                     mark_e.points.append(p)
-            #else:
-                #rospy.logwarn("no goal")
+
+            if ycenter is not None and xcenter is not None and block_point is not None and block_point is not [] and line_length<4 and line_length>2:
                 
-            """
-            if line_length is not None:
-                mark_l.text=("%.3f")%(line_length)
-            else:
-                mark_l.text=("no length")
-            """
+                """
+                mark_c.pose.orientation.x = mark_c.pose.orientation.y = mark_c.pose.orientation.z = 0.0
+                mark_c.pose.orientation.w = 1.0
+                mark_c.pose.position.x =xcenter[0]
+                mark_c.pose.position.y =ycenter[0]
+                mark_c.pose.position.z = 0.0
+                """    
+                
+                mark_d = geomsg.PointStamped()
+                mark_d.header.frame_id = "/laser"
+                mark_d.point.x = xcenter[0]-offset_from_block
+                mark_d.point.y = ycenter[0]
+                mark_d.point.z = 0.0
+                pub_centerpointb.publish(mark_d)
+                
+                             
+            
 
             
             
@@ -750,8 +766,9 @@ def linepub():
             pub_wayp.publish(mark_w)
             pub_side.publish(mark_s)
             pub_poly.publish(mark_sm)
-            #pub_length.publish(mark_l)
             pub_blockp.publish(mark_e)
+            
+            
         rate.sleep()
     
 if __name__ == '__main__':
