@@ -13,8 +13,8 @@ from shapely import affinity
 from shapely.geometry import Point
 from sklearn import linear_model
 from scipy import stats
-import matplotlib.pyplot as plt
-
+import tf2_ros
+from tf2_geometry_msgs import PointStamped
 
 offset_from_block=0.5    #### set parameter: how big tolerance we want from the block, the distance is in meter ####        
 
@@ -604,9 +604,13 @@ def linepub():
     pub_poly = rospy.Publisher("smaller_poly", vismsg.Marker, queue_size=1)
     pub_blockp=rospy.Publisher("block_points", vismsg.Marker, queue_size=1)
     pub_centerpointb=rospy.Publisher("center_points/xy", geomsg.PointStamped, queue_size=1)
+    pub_centerpoint_map=rospy.Publisher("center_points/map", geomsg.PointStamped, queue_size=1)
     
     rate=rospy.Rate(25)
-    
+    tfBuffer = tf2_ros.Buffer()
+    listener = tf2_ros.TransformListener(tfBuffer)
+
+
     # mark_f - free space marker
     mark_f = vismsg.Marker()
     mark_f.header.frame_id = "/laser"
@@ -749,12 +753,16 @@ def linepub():
                 """    
                 
                 mark_d = geomsg.PointStamped()
-                mark_d.header.frame_id = "/laser"
+                mark_d.header.frame_id = "laser"
                 mark_d.point.x = xcenter[0]-offset_from_block
                 mark_d.point.y = ycenter[0]
                 mark_d.point.z = 0.0
                 pub_centerpointb.publish(mark_d)
-                
+                try:
+                    target_pt = tfBuffer.transform(mark_d, "map")
+                    pub_centerpoint_map.publish(target_pt)
+                except:
+                    continue
                              
             
 
