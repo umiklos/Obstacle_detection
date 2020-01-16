@@ -22,7 +22,6 @@ offset_from_block=0.5    #### set parameter: how big tolerance we want from the 
 free_space = None
 orient_line = None
 closest_node = None
-ransac_pol=None
 search_pol=None
 left_sideline=None
 right_sideline=None
@@ -40,8 +39,8 @@ centerpoint=None
 
 class ScanSubscriber():
     def __init__(self):
-        self.dist = None
-        self.orient = None
+        
+        
         self.angles = []
         self.scan_ranges = []
         self.masked_ranges = []
@@ -51,7 +50,7 @@ class ScanSubscriber():
         self.separators = []
 
     def scanCallBack(self,msg):
-        global free_space, orient_line, closest_node,ransac_pol,search_pol,right_sideline,left_sideline,smaller_polygon,block_point,block_dist,h_cent,line_length,yblock,xblock,xcenter,ycenter,offset_from_block
+        global free_space, orient_line, closest_node,search_pol,right_sideline,left_sideline,smaller_polygon,block_point,block_dist,h_cent,line_length,yblock,xblock,xcenter,ycenter,offset_from_block
         # define the slices ~ how many nodes (points) a polygon will have (don't worry later will be simlified with shapely simplify)
         slic = 40
         if len(self.angles) < 1: # if empty
@@ -163,10 +162,7 @@ class ScanSubscriber():
                         xcenter=np.array(xcenter)
                         ycenter=np.array(ycenter)
                         centerpoint=Point(xcenter[0],ycenter[0])
-                        #print(xblock,yblock)
-                        #print(centerpoint.x,centerpoint.y)
-                    #else: 
-                        #print("no vertical lines in the polygon") 
+                         
                           
                 else:
                     rospy.logwarn("no goal")
@@ -246,7 +242,7 @@ class ScanSubscriber():
                                 xcenter=np.array(xcenter)
                                 ycenter=np.array(ycenter)
                                 centerpoint=Point(xcenter[0],ycenter[0])
-                                #print(centerpoint.x,centerpoint.y)
+                                
                                 
                                 
                         else:
@@ -256,7 +252,7 @@ class ScanSubscriber():
 
     def find_orientation(self, p):
         intersect_x = np.arange(0.1, 3, 0.4)
-        # find the beginnning and the end of the polygon, so the edges where a horizontal line intersects
+        # find the beginning and the end of the polygon, so the edges where a horizontal line intersects
         min_y = min(np.asarray(p.exterior.coords)[:,1])
         max_y = max(np.asarray(p.exterior.coords)[:,1])
         middle = []
@@ -359,15 +355,7 @@ class ScanSubscriber():
         return mpoints
     
 
-    def newdistance(self,ransac_line,free_space):
-        if free_space is not None and free_space is not [] and ransac_line is not None:
-            if type(ransac_line.intersection(free_space)) is sg.multilinestring.MultiLineString:
-                new_distance_coords_x,new_distance_coords_y=ransac_line.intersection(free_space)[1].xy
-            else:
-                new_distance_coords_x,new_distance_coords_y=ransac_line.intersection(free_space).xy
-            distance_LS=sg.LineString([(new_distance_coords_x[0],new_distance_coords_y[0]),(new_distance_coords_x[-1],new_distance_coords_y[-1])])
-            new_distance=distance_LS.length
-            return new_distance
+    
 
     def getSides(self,ransac_line,mpoints):
         mx,my=ransac_line.xy
@@ -408,17 +396,7 @@ class ScanSubscriber():
         side=sg.LineString([(xend[0],yleft[0]),(xend[-1],yleft[-1])])
         return side
 
-    def get_endline(self,newdistance,crossline_origin,left_sideline,right_sideline):
-        crossline_end=crossline_origin.parallel_offset(newdistance+1.5)
-        
-        #if len(crossline_end.intersection(left_sideline))>0 and len(crossline_end.intersection(right_sideline))>0:
-        xli_yli=crossline_end.intersection(left_sideline).xy
-        xri_yri=crossline_end.intersection(right_sideline).xy
-        xli_yli=np.array(xli_yli,float)
-        xri_yri=np.array(xri_yri,float)
     
-        #print(newdistance)
-        return xli_yli,xri_yri
 
     def original_points(self):
         a=self.masked_angles
@@ -482,18 +460,15 @@ class ScanSubscriber():
             aa.append(a)
             bb.append(b)    
 
-        viz=[]
         fugg=[]
         for j in range (len(aa)):
-            if aa[j]>bb[j]:
-                viz.append(j)
-            elif aa[j]<bb[j]:
+            if aa[j]<bb[j]:
                 fugg.append(j)
                 return fugg
                 
 
     def block_linesCoordinate(self,block_lines):
-        #if len(block_lines.shape)==3:
+        
         xf,indx=np.unique(block_lines[:,:,0],return_index=True)
         yf,indy=np.unique(block_lines[:,:,1],return_index=True)
         
@@ -503,7 +478,6 @@ class ScanSubscriber():
         if len(coords)>1:
             lineb=sg.LineString((coords))
             x_centerpoint,y_centerpoint=lineb.centroid.xy
-            #xa,ya=lineb.xy
             length=lineb.length
             return length,lineb,x_centerpoint,y_centerpoint
 
@@ -582,8 +556,6 @@ class ScanSubscriber():
     def nearblock_side_lines(self,poly0_cross,xpm,ypm):
         right_sideline=affinity.rotate(poly0_cross,270,(xpm[0],ypm[0]))
         left_sideline=affinity.rotate(poly0_cross,90,(xpm[1],ypm[1]))
-        #right_sideline=right_sideline_org.parallel_offset(1,'left')
-        #left_sideline=left_sideline_org.parallel_offset(1)
         return right_sideline,left_sideline
 
     def nearblock_get_polygon(self,right_sideline,left_sideline,ofsetted_endline):
@@ -743,14 +715,7 @@ def linepub():
                     mark_e.points.append(p)
 
             if ycenter is not None and xcenter is not None and block_point is not None and block_point is not [] and line_length<4 and line_length>2:
-                
-                """
-                mark_c.pose.orientation.x = mark_c.pose.orientation.y = mark_c.pose.orientation.z = 0.0
-                mark_c.pose.orientation.w = 1.0
-                mark_c.pose.position.x =xcenter[0]
-                mark_c.pose.position.y =ycenter[0]
-                mark_c.pose.position.z = 0.0
-                """    
+                   
                 
                 mark_d = geomsg.PointStamped()
                 mark_d.header.frame_id = "laser"
