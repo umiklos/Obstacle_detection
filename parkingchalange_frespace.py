@@ -569,14 +569,14 @@ def linepub():
     sc=ScanSubscriber()  
     rospy.Subscriber("/scan", senmsg.LaserScan, sc.scanCallBack)
     
-    pub_free = rospy.Publisher("free_space", vismsg.Marker, queue_size=1)
+    pub_free = rospy.Publisher("free_space_polygon", vismsg.Marker, queue_size=1)
     pub_text = rospy.Publisher("free_space_text", vismsg.Marker, queue_size=1)
     pub_wayp = rospy.Publisher("free_waypoints", vismsg.Marker, queue_size=1)
     pub_side = rospy.Publisher("side_points", vismsg.Marker, queue_size=1)
     pub_poly = rospy.Publisher("smaller_poly", vismsg.Marker, queue_size=1)
-    pub_blockp=rospy.Publisher("block_points", vismsg.Marker, queue_size=1)
-    pub_centerpointb=rospy.Publisher("center_points/xy", geomsg.PointStamped, queue_size=1)
-    pub_centerpoint_map=rospy.Publisher("center_points/map", geomsg.PointStamped, queue_size=1)
+    pub_blockp=rospy.Publisher("wall", vismsg.Marker, queue_size=1)
+    pub_centerpointb=rospy.Publisher("goalpoint/xy", geomsg.PointStamped, queue_size=1)
+    pub_centerpoint_map=rospy.Publisher("goalpoint/map", geomsg.PointStamped, queue_size=1)
     
     rate=rospy.Rate(25)
     tfBuffer = tf2_ros.Buffer()
