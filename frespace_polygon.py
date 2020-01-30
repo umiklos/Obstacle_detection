@@ -13,8 +13,8 @@ from shapely import affinity
 from shapely.geometry import Point
 from sklearn import linear_model
 from scipy import stats
-import tf2_ros
-from tf2_geometry_msgs import PointStamped
+
+
 
 
 tolerance=0.12
@@ -55,7 +55,7 @@ class ScanSubscriber():
         free_space = sg.Polygon(np.column_stack((x, y)))
         # here the polygon will be simplified, from 40 node down to 4-7 if the barriers are in a rectangular shape
         free_space = sg.Polygon(free_space.simplify(tolerance, preserve_topology=False))
-
+        
         if type(free_space) is sg.multipolygon.MultiPolygon:
             # if more polygon, choose the closest        
             min_dist = 999
