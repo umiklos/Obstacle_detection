@@ -67,9 +67,8 @@ class ScanSubscriber():
                         min_ind = i
                     i += 1
                 free_space = free_space[min_ind]
-            
-            if free_space is not None and free_space is not []:
-                free_sp_dist = self.dist_poly(free_space) # distances of the simplyfied free space
+        
+        
 
     def dist_poly(self, polygon):
         points = np.asarray(polygon.exterior.coords)
@@ -78,6 +77,8 @@ class ScanSubscriber():
             # eucledian distance
             distances.append(np.linalg.norm(point[0] - point[1]))
         return np.asarray(distances)
+
+    
     
 
 def linepub(): 
@@ -85,7 +86,7 @@ def linepub():
     sc=ScanSubscriber()  
     rospy.Subscriber("/scan", senmsg.LaserScan, sc.scanCallBack)
     
-    pub_free = rospy.Publisher("free_space", vismsg.Marker, queue_size=1)
+    pub_free = rospy.Publisher("free_space_polygon", vismsg.Marker, queue_size=1)
     
     
     rate=rospy.Rate(25)
