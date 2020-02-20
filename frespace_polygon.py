@@ -13,8 +13,8 @@ from shapely import affinity
 from shapely.geometry import Point
 from sklearn import linear_model
 from scipy import stats
-
-
+#import tf2_ros
+#from tf2_geometry_msgs import PointStamped
 
 
 tolerance=0.12
@@ -53,22 +53,23 @@ class ScanSubscriber():
         x = r * np.cos(a)
         y = r * np.sin(a)
         free_space = sg.Polygon(np.column_stack((x, y)))
+        if free_space.is_valid:
         # here the polygon will be simplified, from 40 node down to 4-7 if the barriers are in a rectangular shape
-        free_space = sg.Polygon(free_space.simplify(tolerance, preserve_topology=False))
-        
-        if type(free_space) is sg.multipolygon.MultiPolygon:
-            # if more polygon, choose the closest        
-            min_dist = 999
-            i = 0
-            for poly in free_space:
-                if np.mean(self.dist_poly(poly)) < min_dist:
-                    min_dist = np.mean(self.dist_poly(poly))
-                    min_ind = i
-                i += 1
-            free_space = free_space[min_ind]
-        
-        if free_space is not None and free_space is not []:
-            free_sp_dist = self.dist_poly(free_space) # distances of the simplyfied free space
+            free_space = sg.Polygon(free_space.simplify(tolerance, preserve_topology=False))
+
+            if type(free_space) is sg.multipolygon.MultiPolygon:
+                # if more polygon, choose the closest        
+                min_dist = 999
+                i = 0
+                for poly in free_space:
+                    if np.mean(self.dist_poly(poly)) < min_dist:
+                        min_dist = np.mean(self.dist_poly(poly))
+                        min_ind = i
+                    i += 1
+                free_space = free_space[min_ind]
+            
+            if free_space is not None and free_space is not []:
+                free_sp_dist = self.dist_poly(free_space) # distances of the simplyfied free space
 
     def dist_poly(self, polygon):
         points = np.asarray(polygon.exterior.coords)
