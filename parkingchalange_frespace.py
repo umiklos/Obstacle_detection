@@ -48,6 +48,7 @@ class ScanSubscriber():
         self.xy_masked = []
         self.masked_angles = []
         self.separators = []
+        self.testvalue = []
 
     def scanCallBack(self,msg):
         global free_space, orient_line, closest_node,search_pol,right_sideline,left_sideline,smaller_polygon,block_point,block_dist,h_cent,line_length,yblock,xblock,xcenter,ycenter,offset_from_block
@@ -94,116 +95,58 @@ class ScanSubscriber():
                 closest_node = block_dist #min(free_sp_dist)
                 orient_lineLs=sg.LineString(middle_coords)
                 
-                if block_dist>3.5:
+                self.testvalue.append(block_dist)
+                id=len(self.testvalue)
+                block_distances=np.asarray(self.testvalue)
                 
-                    crosslines,middle_line=self.cross_lines(free_space,h_cent,orientation,orient_lineLs)
-                    mpoints=self.get_mpoints(crosslines)
-                    left_distances,right_distances=self.getSides(middle_line,mpoints)
-                    left_distance=self.get_offset(left_distances)
-                    right_distance=self.get_offset(right_distances)
-                    left_side_line=sg.LineString(middle_line.parallel_offset(left_distance-0.5,'left'))
-                    right_side_line=sg.LineString(middle_line.parallel_offset(right_distance-0.5))  
-                    
-                    left_side,right_side=self.get_polygon_sides(left_side_line,right_side_line)
-                    search_pol=self.get_polygon(left_side,right_side)
-                    endline=self.get_endline(left_side_line,right_side_line)
+                block_diff=np.diff(block_distances)
 
-                    
-                    xe,ye=endline.xy
-                    end_line=np.column_stack((xe,ye))
-                                            
-                    polygon_diff=self.get_line_diff(endline,h_cent,block_dist)
-                    ofsetted_endline=endline.parallel_offset(polygon_diff+1,'right')
-                    xendl,yendl=ofsetted_endline.xy
-                    endline_left=np.column_stack((xendl,yendl))
-
-                    smaller_polygon=self.get_polygon(ofsetted_endline,end_line)
-
-                    slope_left,intercept_left=self.lineEquations(left_side)
-                    slope_right,intercept_right=self.lineEquations(right_side)
-                    slope_end_r,intercept_end_r=self.lineEquations(end_line)
-                    slope_end_l,intercept_end_l=self.lineEquations(endline_left)
-                    
-                    originalpoints=self.original_points()
-                    maskedpoints=self.get_maskedpoints(slope_left,slope_right,intercept_left,intercept_right,intercept_end_r,intercept_end_l,slope_end_r,slope_end_l,originalpoints)
-                    
-                    if len(maskedpoints)>3:
-                        block=sg.LineString(maskedpoints)
-                        block=block.simplify(0.5,preserve_topology=False)
-                        lines,block_slopes=self.get_slope(block)       
-                        vertical=self.verical_or_horizontal(block_slopes,orientation)
-                        block_lines=lines[vertical]
-                       
-                        if np.any(block_lines):                            
-                            line_length,block_point,xcenter,ycenter=self.block_linesCoordinate(block_lines)
-                            xblock,yblock=block_point.xy
-                            xcenter=np.array(xcenter)
-                            ycenter=np.array(ycenter)
-                            centerpoint=Point(xcenter[0],ycenter[0])
-                            
-                            
-                        else:
-                            rospy.logwarn("no goal")
+                mask=block_diff>-1                      
+                
+                if id>1:
+                    if mask[id-2]==True:
                         
+                        if block_dist>3.5:
                         
-                        
+                            crosslines,middle_line=self.cross_lines(free_space,h_cent,orientation,orient_lineLs)
+                            mpoints=self.get_mpoints(crosslines)
+                            left_distances,right_distances=self.getSides(middle_line,mpoints)
+                            left_distance=self.get_offset(left_distances)
+                            right_distance=self.get_offset(right_distances)
+                            left_side_line=sg.LineString(middle_line.parallel_offset(left_distance-0.5,'left'))
+                            right_side_line=sg.LineString(middle_line.parallel_offset(right_distance-0.5))  
                             
-                          
-    ########### near block#####################################            
-                elif block_dist<3.5:
-                   
+                            left_side,right_side=self.get_polygon_sides(left_side_line,right_side_line)
+                            search_pol=self.get_polygon(left_side,right_side)
+                            endline=self.get_endline(left_side_line,right_side_line)
 
-                    crosslines,poly0=self.nearblock_get_crosslines(free_space)           
-                    mpoints=self.nearblock_get_intersectpoints(crosslines)
-                    if len(mpoints)>2:
-                        endline,dist=self.nearblock_get_endline(mpoints,free_space,poly0,miny,maxy)
-                        x_int_points,y_int_points,poly0_cross=self.nearblock_offset_endline(endline,dist,free_space)
-                        right_sideline,left_sideline=self.nearblock_side_lines(poly0_cross,x_int_points,y_int_points)
-
-                        if type(left_sideline) is sg.linestring.LineString and type(right_sideline) is sg.linestring.LineString and type(endline) is sg.linestring.LineString: 
-
-                            left_side,right_side=self.get_polygon_sides(left_sideline,right_sideline)
-
-                            offseted_endline=endline.parallel_offset(1.5)
-                            xe,ye=offseted_endline.xy
-                            xl0,yl0=poly0.xy
+                            
+                            xe,ye=endline.xy
                             end_line=np.column_stack((xe,ye))
-                            endline_left=np.column_stack((xl0,yl0))
+                                                    
+                            polygon_diff=self.get_line_diff(endline,h_cent,block_dist)
+                            ofsetted_endline=endline.parallel_offset(polygon_diff+1,'right')
+                            xendl,yendl=ofsetted_endline.xy
+                            endline_left=np.column_stack((xendl,yendl))
+
+                            smaller_polygon=self.get_polygon(ofsetted_endline,end_line)
 
                             slope_left,intercept_left=self.lineEquations(left_side)
                             slope_right,intercept_right=self.lineEquations(right_side)
                             slope_end_r,intercept_end_r=self.lineEquations(end_line)
                             slope_end_l,intercept_end_l=self.lineEquations(endline_left)
-
-                            left_upperP_x,left_upperP_y,right_upperP_x,right_upperP_y=self.nearblock_get_polygon(right_sideline,left_sideline,offseted_endline)
-                            left_upperP_x=np.array(left_upperP_x)
-                            left_upperP_y=np.array(left_upperP_y)
-                            right_upperP_x=np.array(right_upperP_x)
-                            right_upperP_y=np.array(right_upperP_y)
-                            x_int_points=np.array(x_int_points)
-                            y_int_points=np.array(y_int_points)
-                        
-                            left_sideNB=sg.LineString([(x_int_points[1],y_int_points[1]),(left_upperP_x,left_upperP_y)])
-                            right_sideNB=sg.LineString([(right_upperP_x,right_upperP_y),(x_int_points[0],y_int_points[0])])
-
-                            smaller_polygon=self.get_polygon(left_sideNB,right_sideNB)
-
+                            
                             originalpoints=self.original_points()
                             maskedpoints=self.get_maskedpoints(slope_left,slope_right,intercept_left,intercept_right,intercept_end_r,intercept_end_l,slope_end_r,slope_end_l,originalpoints)
                             
-                            
-                            
-
                             if len(maskedpoints)>3:
                                 block=sg.LineString(maskedpoints)
                                 block=block.simplify(0.5,preserve_topology=False)
-                                lines,block_slopes=self.get_slope(block)               
-                                vertical=self.nearblock_verical_or_horizontal(block_slopes,slope_end_r,slope_left)
+                                lines,block_slopes=self.get_slope(block)       
+                                vertical=self.verical_or_horizontal(block_slopes,orientation)
                                 block_lines=lines[vertical]
-                                
-                                
-                                
-                                if np.any(block_lines):
+                            
+                                if np.any(block_lines):                            
                                     line_length,block_point,xcenter,ycenter=self.block_linesCoordinate(block_lines)
                                     xblock,yblock=block_point.xy
                                     xcenter=np.array(xcenter)
@@ -211,11 +154,79 @@ class ScanSubscriber():
                                     centerpoint=Point(xcenter[0],ycenter[0])
                                     
                                     
-                                    
                                 else:
                                     rospy.logwarn("no goal")
                                 
-                            
+                                
+                                
+                                    
+                                
+            ########### near block#####################################            
+                        elif block_dist<3.5:
+                        
+                            crosslines,poly0=self.nearblock_get_crosslines(free_space)           
+                            mpoints=self.nearblock_get_intersectpoints(crosslines)
+                            if len(mpoints)>2:
+                                endline,dist=self.nearblock_get_endline(mpoints,free_space,poly0,miny,maxy)
+                                x_int_points,y_int_points,poly0_cross=self.nearblock_offset_endline(endline,dist,free_space)
+                                right_sideline,left_sideline=self.nearblock_side_lines(poly0_cross,x_int_points,y_int_points)
+
+                                if type(left_sideline) is sg.linestring.LineString and type(right_sideline) is sg.linestring.LineString and type(endline) is sg.linestring.LineString: 
+
+                                    left_side,right_side=self.get_polygon_sides(left_sideline,right_sideline)
+
+                                    offseted_endline=endline.parallel_offset(1.5)
+                                    xe,ye=offseted_endline.xy
+                                    xl0,yl0=poly0.xy
+                                    end_line=np.column_stack((xe,ye))
+                                    endline_left=np.column_stack((xl0,yl0))
+
+                                    slope_left,intercept_left=self.lineEquations(left_side)
+                                    slope_right,intercept_right=self.lineEquations(right_side)
+                                    slope_end_r,intercept_end_r=self.lineEquations(end_line)
+                                    slope_end_l,intercept_end_l=self.lineEquations(endline_left)
+
+                                    left_upperP_x,left_upperP_y,right_upperP_x,right_upperP_y=self.nearblock_get_polygon(right_sideline,left_sideline,offseted_endline)
+                                    left_upperP_x=np.array(left_upperP_x)
+                                    left_upperP_y=np.array(left_upperP_y)
+                                    right_upperP_x=np.array(right_upperP_x)
+                                    right_upperP_y=np.array(right_upperP_y)
+                                    x_int_points=np.array(x_int_points)
+                                    y_int_points=np.array(y_int_points)
+                                
+                                    left_sideNB=sg.LineString([(x_int_points[1],y_int_points[1]),(left_upperP_x,left_upperP_y)])
+                                    right_sideNB=sg.LineString([(right_upperP_x,right_upperP_y),(x_int_points[0],y_int_points[0])])
+
+                                    smaller_polygon=self.get_polygon(left_sideNB,right_sideNB)
+
+                                    originalpoints=self.original_points()
+                                    maskedpoints=self.get_maskedpoints(slope_left,slope_right,intercept_left,intercept_right,intercept_end_r,intercept_end_l,slope_end_r,slope_end_l,originalpoints)
+                                    
+                                    
+                                    
+
+                                    if len(maskedpoints)>3:
+                                        block=sg.LineString(maskedpoints)
+                                        block=block.simplify(0.5,preserve_topology=False)
+                                        lines,block_slopes=self.get_slope(block)               
+                                        vertical=self.nearblock_verical_or_horizontal(block_slopes,slope_end_r,slope_left)
+                                        block_lines=lines[vertical]
+                                        
+                                        
+                                        
+                                        if np.any(block_lines):
+                                            line_length,block_point,xcenter,ycenter=self.block_linesCoordinate(block_lines)
+                                            xblock,yblock=block_point.xy
+                                            xcenter=np.array(xcenter)
+                                            ycenter=np.array(ycenter)
+                                            centerpoint=Point(xcenter[0],ycenter[0])
+                                            
+                                            
+                                            
+                                        else:
+                                            rospy.logwarn("no goal")
+                                        
+                                    
 
     def find_orientation(self, p):
         intersect_x = np.arange(0.1, 3, 0.4)
@@ -571,8 +582,10 @@ class ScanSubscriber():
 
 
 def linepub(): 
-    rospy.init_node("rviz_marker", anonymous=True)  
-    sc=ScanSubscriber()  
+    rospy.init_node("rviz_marker", anonymous=True)
+    arr = []  
+    sc=ScanSubscriber()
+    sc.testvalue = arr   
     rospy.Subscriber("/scan", senmsg.LaserScan, sc.scanCallBack)
     
     pub_free = rospy.Publisher("free_space_polygon", vismsg.Marker, queue_size=1)
@@ -708,19 +721,19 @@ def linepub():
                     mark_s.points.append(p)
 
             mark_sm.points=[]        
-            if smaller_polygon is not None and smaller_polygon is not []:
+            if smaller_polygon is not None and smaller_polygon is not [] and block_dist >-1:
                 for s in smaller_polygon.exterior.coords:
                     p = geomsg.Point(); p.x = s[0]; p.y = s[1]; p.z = 0.0
                     mark_sm.points.append(p)
             
             
             mark_e.points=[]
-            if block_point is not None and block_point is not [] and line_length<4 and line_length>2:
+            if block_point is not None and block_point is not [] and line_length<4 and line_length>2 and block_dist >-1:
                 for e in range(2):
                     p = geomsg.Point(); p.x = xblock[e]; p.y = yblock[e]; p.z = 0.0
                     mark_e.points.append(p)
 
-            if ycenter is not None and xcenter is not None and block_point is not None and block_point is not [] and line_length<4 and line_length>2:
+            if ycenter is not None and xcenter is not None and block_point is not None and block_point is not [] and line_length<4 and line_length>2 and block_dist >-1:
                    
                 
                 mark_d = geomsg.PointStamped()
