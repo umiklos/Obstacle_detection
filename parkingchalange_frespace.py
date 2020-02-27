@@ -13,11 +13,13 @@ from shapely import affinity
 from shapely.geometry import Point
 from sklearn import linear_model
 from scipy import stats
+import math
 #import tf2_ros
 #from tf2_geometry_msgs import PointStamped
 
-offset_from_block=0.5    #### set parameter: how big tolerance we want from the block, the distance is in meter ####        
-
+offset_from_block=0.5    #### set parameter: how big tolerance we want from the block, the distance is in meter #### 
+block_length=3.4       
+block_length_tolerance=0.3
 
 free_space = None
 orient_line = None
@@ -35,6 +37,9 @@ yblock=None
 xcenter=None
 ycenter=None
 centerpoint=None
+id_or=0
+orient_mask=None
+
 
 
 class ScanSubscriber():
@@ -49,9 +54,10 @@ class ScanSubscriber():
         self.masked_angles = []
         self.separators = []
         self.testvalue = []
+        self.testorientation=[]
 
     def scanCallBack(self,msg):
-        global free_space, orient_line, closest_node,search_pol,right_sideline,left_sideline,smaller_polygon,block_point,block_dist,h_cent,line_length,yblock,xblock,xcenter,ycenter,offset_from_block
+        global free_space, orient_line, closest_node,search_pol,right_sideline,left_sideline,smaller_polygon,block_point,block_dist,h_cent,line_length,yblock,xblock,xcenter,ycenter,offset_from_block,block_length,block_length_tolerance,id_or,orient_mask
         # define the slices ~ how many nodes (points) a polygon will have (don't worry later will be simlified with shapely simplify)
         slic = 40
         if len(self.angles) < 1: # if empty
@@ -145,15 +151,24 @@ class ScanSubscriber():
                                 lines,block_slopes=self.get_slope(block)       
                                 vertical=self.verical_or_horizontal(block_slopes,orientation)
                                 block_lines=lines[vertical]
+                                                            
                             
-                                if np.any(block_lines):                            
+                                if np.any(block_lines) and block_lines.shape[0]>0 and len(block_lines.shape) < 4 :                            
                                     line_length,block_point,xcenter,ycenter=self.block_linesCoordinate(block_lines)
                                     xblock,yblock=block_point.xy
-                                    xcenter=np.array(xcenter)
-                                    ycenter=np.array(ycenter)
-                                    centerpoint=Point(xcenter[0],ycenter[0])
+                                                                        
+                                    line_slope=self.get_block_lines_slopes(block_lines)
                                     
-                                    
+                                    rel_orientation=self.get_relative_orientation(orientation,line_slope)
+                                    if line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance:
+                                        rel_orientation=self.get_relative_orientation(orientation,line_slope)
+                                        
+                                        self.testorientation.append(rel_orientation)
+                                        id_or=(len(self.testorientation))
+                                        relative_orientations=np.asarray(self.testorientation)
+                                        orient_diff=abs(np.diff(relative_orientations))
+                                        orient_mask=orient_diff<2
+                                        
                                 else:
                                     rospy.logwarn("no goal")
                                 
@@ -214,15 +229,22 @@ class ScanSubscriber():
                                         
                                         
                                         
-                                        if np.any(block_lines):
+                                        if np.any(block_lines) and block_lines.shape[0]>0 and len(block_lines.shape) < 4 :
                                             line_length,block_point,xcenter,ycenter=self.block_linesCoordinate(block_lines)
                                             xblock,yblock=block_point.xy
-                                            xcenter=np.array(xcenter)
-                                            ycenter=np.array(ycenter)
-                                            centerpoint=Point(xcenter[0],ycenter[0])
+                                        
                                             
-                                            
-                                            
+                                            line_slope=self.get_block_lines_slopes(block_lines)                                            
+                                            if line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance:
+                                                rel_orientation=self.get_relative_orientation(orientation,line_slope)
+                                                self.testorientation.append(rel_orientation)
+                                                                                    
+                                                id_or=(len(self.testorientation))
+                                                relative_orientations=np.asarray(self.testorientation)
+                                                orient_diff=abs(np.diff(relative_orientations))
+
+                                                orient_mask=orient_diff<2
+                                                
                                         else:
                                             rospy.logwarn("no goal")
                                         
@@ -250,7 +272,7 @@ class ScanSubscriber():
                 y_c1=(y1[1]+y[0])/2
                 middle.append([x_c1, y_c1])
                
-
+        
         middle = np.asarray(middle)
         
         hist_num, hist_val = np.unique(np.diff(middle[:, 1]),return_counts=True)
@@ -258,8 +280,9 @@ class ScanSubscriber():
         start_y = middle[0, 1]
         middle[:, 1] = np.arange(0, len(middle[:, 1])) * most_common + start_y
         horizontal_center, orientation = np.polynomial.polynomial.polyfit(middle[:, 0], middle[:, 1], 1)
-        #print(horizontal_center)
         return horizontal_center, orientation
+        
+            
 
     def find_block_distance(self, h_cent, orientation, p):
         l = sg.LineString([(0, h_cent), (20, h_cent + 20 * orientation)])
@@ -580,12 +603,29 @@ class ScanSubscriber():
         eq=(-intercept+points[:,1])/slope
         return eq
 
+    def get_block_lines_slopes(self,block_lines):
+        newx1=block_lines[0,0,0]
+        newx2=block_lines[0,1,0]
+        newy1=block_lines[0,0,1]
+        newy2=block_lines[0,1,1]
+        slope,_,_,_,_= stats.linregress([newx1,newx2],[newy1,newy2])
+        slope=math.radians(slope)
+        return slope
+
+    def get_relative_orientation(self,orientation,line_slope):
+        #rel_orientation=line_slope-orientation
+        rel_orientation=math.radians(180)-orientation-((math.radians(90))-line_slope)
+        rel_orientation=math.degrees(rel_orientation)
+        return rel_orientation
+
 
 def linepub(): 
     rospy.init_node("rviz_marker", anonymous=True)
-    arr = []  
+    arr = [] 
+    arr2=[] 
     sc=ScanSubscriber()
-    sc.testvalue = arr   
+    sc.testvalue = arr
+    sc.testorientation=arr2   
     rospy.Subscriber("/scan", senmsg.LaserScan, sc.scanCallBack)
     
     pub_free = rospy.Publisher("free_space_polygon", vismsg.Marker, queue_size=1)
@@ -721,36 +761,47 @@ def linepub():
                     mark_s.points.append(p)
 
             mark_sm.points=[]        
-            if smaller_polygon is not None and smaller_polygon is not [] and block_dist >-1:
-                for s in smaller_polygon.exterior.coords:
-                    p = geomsg.Point(); p.x = s[0]; p.y = s[1]; p.z = 0.0
-                    mark_sm.points.append(p)
+            
             
             
             mark_e.points=[]
-            if block_point is not None and block_point is not [] and line_length<4 and line_length>2 and block_dist >-1:
-                for e in range(2):
-                    p = geomsg.Point(); p.x = xblock[e]; p.y = yblock[e]; p.z = 0.0
-                    mark_e.points.append(p)
+            if id_or > 1:
+                if orient_mask[id_or-2]==True:
 
-            if ycenter is not None and xcenter is not None and block_point is not None and block_point is not [] and line_length<4 and line_length>2 and block_dist >-1:
-                   
-                
-                mark_d = geomsg.PointStamped()
-                mark_d.header.frame_id = "laser"
-                mark_d.point.x = xcenter[0]-offset_from_block
-                mark_d.point.y = ycenter[0]
-                mark_d.point.z = 0.0
-                pub_centerpointb.publish(mark_d)
+                    if smaller_polygon is not None and smaller_polygon is not [] and block_dist >-1:
+                        for s in smaller_polygon.exterior.coords:
+                            p = geomsg.Point(); p.x = s[0]; p.y = s[1]; p.z = 0.0
+                            mark_sm.points.append(p)
 
-                """
-                try:
-                    target_pt = tfBuffer.transform(mark_d, "map")
-                    pub_centerpoint_map.publish(target_pt)
-                except:
-                    continue
-                """           
-            
+                    if block_point is not None and block_point is not [] and line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance and block_dist >-1:
+                        for e in range(2):
+                            p = geomsg.Point(); p.x = xblock[e]; p.y = yblock[e]; p.z = 0.0
+                            mark_e.points.append(p)
+                    """        
+                    else:
+                        rospy.logwarn("no wall found")
+                    """
+                    if ycenter is not None and xcenter is not None and block_point is not None and block_point is not [] and line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance and block_dist >-1:
+                        
+                        
+                        mark_d = geomsg.PointStamped()
+                        mark_d.header.frame_id = "laser"
+                        mark_d.point.x = xcenter[0]-offset_from_block
+                        mark_d.point.y = ycenter[0]
+                        mark_d.point.z = 0.0
+                        pub_centerpointb.publish(mark_d)
+                    """    
+                    else:
+                        rospy.logwarn("no centerpoint")
+
+                       
+                        try:
+                            target_pt = tfBuffer.transform(mark_d, "map")
+                            pub_centerpoint_map.publish(target_pt)
+                        except:
+                            continue
+                        """           
+                    
 
             
             
