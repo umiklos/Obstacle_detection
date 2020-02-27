@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-
 import rospy
 import std_msgs.msg as rosmsg
 import nav_msgs.msg as navmsg
@@ -14,12 +13,12 @@ from shapely.geometry import Point
 from sklearn import linear_model
 from scipy import stats
 import math
-#import tf2_ros
-#from tf2_geometry_msgs import PointStamped
 
-offset_from_block=0.5    #### set parameter: how big tolerance we want from the block, the distance is in meter #### 
-block_length=3.4       
-block_length_tolerance=0.3
+
+#### set parameter: how big tolerance we want from the block, the distance is in meter #### 
+offset_from_block=rospy.get_param('/my_node/offset_from_block')
+block_length=rospy.get_param('/my_node/block_length')       
+block_length_tolerance=rospy.get_param('/my_node/block_length_tolerance')
 
 free_space = None
 orient_line = None
