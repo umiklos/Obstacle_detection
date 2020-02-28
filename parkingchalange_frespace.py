@@ -15,8 +15,8 @@ from scipy import stats
 import math
 
 
-#### set parameter: how big tolerance we want from the block, the distance is in meter #### 
-offset_from_block=rospy.get_param('/my_node/offset_from_block')
+
+offset_from_block=rospy.get_param('/my_node/offset_from_block')       #### set parameter: how big tolerance we want from the block, the distance is in meter #### 
 block_length=rospy.get_param('/my_node/block_length')       
 block_length_tolerance=rospy.get_param('/my_node/block_length_tolerance')
 
@@ -93,161 +93,162 @@ class ScanSubscriber():
             if free_space is not None and free_space is not []:
                 #free_sp_dist = self.dist_poly(free_space) # distances of the simplyfied free space
                 minx,miny,maxx,maxy=self.get_bounds(free_space)
-                h_cent, orientation = self.find_orientation(free_space)
-                block_dist = self.find_block_distance(h_cent, orientation, free_space)
-                middle_coords = np.array([[0,h_cent], [0.1, h_cent + 0.1 * orientation], [block_dist, h_cent + block_dist *orientation]])
-                orient_line = sg.Polygon(list(middle_coords))
-                closest_node = block_dist #min(free_sp_dist)
-                orient_lineLs=sg.LineString(middle_coords)
-                
-                self.testvalue.append(block_dist)
-                id=len(self.testvalue)
-                block_distances=np.asarray(self.testvalue)
-                
-                block_diff=np.diff(block_distances)
+                if maxx>1:
+                    h_cent, orientation = self.find_orientation(free_space)
+                    block_dist = self.find_block_distance(h_cent, orientation, free_space)
+                    middle_coords = np.array([[0,h_cent], [0.1, h_cent + 0.1 * orientation], [block_dist, h_cent + block_dist *orientation]])
+                    orient_line = sg.Polygon(list(middle_coords))
+                    closest_node = block_dist #min(free_sp_dist)
+                    orient_lineLs=sg.LineString(middle_coords)
+                    
+                    self.testvalue.append(block_dist)
+                    id=len(self.testvalue)
+                    block_distances=np.asarray(self.testvalue)
+                    
+                    block_diff=np.diff(block_distances)
 
-                mask=block_diff>-1                      
-                
-                if id>1:
-                    if mask[id-2]==True:
-                        
-                        if block_dist>3.5:
-                        
-                            crosslines,middle_line=self.cross_lines(free_space,h_cent,orientation,orient_lineLs)
-                            mpoints=self.get_mpoints(crosslines)
-                            left_distances,right_distances=self.getSides(middle_line,mpoints)
-                            left_distance=self.get_offset(left_distances)
-                            right_distance=self.get_offset(right_distances)
-                            left_side_line=sg.LineString(middle_line.parallel_offset(left_distance-0.5,'left'))
-                            right_side_line=sg.LineString(middle_line.parallel_offset(right_distance-0.5))  
+                    mask=block_diff>-1                      
+                    
+                    if id>1:
+                        if mask[id-2]==True or  (mask[id-3]==False and mask[id-2]==False) :
                             
-                            left_side,right_side=self.get_polygon_sides(left_side_line,right_side_line)
-                            search_pol=self.get_polygon(left_side,right_side)
-                            endline=self.get_endline(left_side_line,right_side_line)
+                            if block_dist>3.5:
+                            
+                                crosslines,middle_line=self.cross_lines(free_space,h_cent,orientation,orient_lineLs)
+                                mpoints=self.get_mpoints(crosslines)
+                                left_distances,right_distances=self.getSides(middle_line,mpoints)
+                                left_distance=self.get_offset(left_distances)
+                                right_distance=self.get_offset(right_distances)
+                                left_side_line=sg.LineString(middle_line.parallel_offset(left_distance-0.5,'left'))
+                                right_side_line=sg.LineString(middle_line.parallel_offset(right_distance-0.5))  
+                                
+                                left_side,right_side=self.get_polygon_sides(left_side_line,right_side_line)
+                                search_pol=self.get_polygon(left_side,right_side)
+                                endline=self.get_endline(left_side_line,right_side_line)
 
-                            
-                            xe,ye=endline.xy
-                            end_line=np.column_stack((xe,ye))
-                                                    
-                            polygon_diff=self.get_line_diff(endline,h_cent,block_dist)
-                            ofsetted_endline=endline.parallel_offset(polygon_diff+1,'right')
-                            xendl,yendl=ofsetted_endline.xy
-                            endline_left=np.column_stack((xendl,yendl))
+                                
+                                xe,ye=endline.xy
+                                end_line=np.column_stack((xe,ye))
+                                                        
+                                polygon_diff=self.get_line_diff(endline,h_cent,block_dist)
+                                ofsetted_endline=endline.parallel_offset(polygon_diff+1,'right')
+                                xendl,yendl=ofsetted_endline.xy
+                                endline_left=np.column_stack((xendl,yendl))
 
-                            smaller_polygon=self.get_polygon(ofsetted_endline,end_line)
+                                smaller_polygon=self.get_polygon(ofsetted_endline,end_line)
 
-                            slope_left,intercept_left=self.lineEquations(left_side)
-                            slope_right,intercept_right=self.lineEquations(right_side)
-                            slope_end_r,intercept_end_r=self.lineEquations(end_line)
-                            slope_end_l,intercept_end_l=self.lineEquations(endline_left)
-                            
-                            originalpoints=self.original_points()
-                            maskedpoints=self.get_maskedpoints(slope_left,slope_right,intercept_left,intercept_right,intercept_end_r,intercept_end_l,slope_end_r,slope_end_l,originalpoints)
-                            
-                            if len(maskedpoints)>3:
-                                block=sg.LineString(maskedpoints)
-                                block=block.simplify(0.5,preserve_topology=False)
-                                lines,block_slopes=self.get_slope(block)       
-                                vertical=self.verical_or_horizontal(block_slopes,orientation)
-                                block_lines=lines[vertical]
-                                                            
-                            
-                                if np.any(block_lines) and block_lines.shape[0]>0 and len(block_lines.shape) < 4 :                            
-                                    line_length,block_point,xcenter,ycenter=self.block_linesCoordinate(block_lines)
-                                    xblock,yblock=block_point.xy
-                                                                        
-                                    line_slope=self.get_block_lines_slopes(block_lines)
-                                    
-                                    rel_orientation=self.get_relative_orientation(orientation,line_slope)
-                                    if line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance:
+                                slope_left,intercept_left=self.lineEquations(left_side)
+                                slope_right,intercept_right=self.lineEquations(right_side)
+                                slope_end_r,intercept_end_r=self.lineEquations(end_line)
+                                slope_end_l,intercept_end_l=self.lineEquations(endline_left)
+                                
+                                originalpoints=self.original_points()
+                                maskedpoints=self.get_maskedpoints(slope_left,slope_right,intercept_left,intercept_right,intercept_end_r,intercept_end_l,slope_end_r,slope_end_l,originalpoints)
+                                
+                                if len(maskedpoints)>3:
+                                    block=sg.LineString(maskedpoints)
+                                    block=block.simplify(0.5,preserve_topology=False)
+                                    lines,block_slopes=self.get_slope(block)       
+                                    vertical=self.verical_or_horizontal(block_slopes,orientation)
+                                    block_lines=lines[vertical]
+                                                                
+                                
+                                    if np.any(block_lines) and block_lines.shape[0]>0 and len(block_lines.shape) < 4 :                            
+                                        line_length,block_point,xcenter,ycenter=self.block_linesCoordinate(block_lines)
+                                        xblock,yblock=block_point.xy
+                                                                            
+                                        line_slope=self.get_block_lines_slopes(block_lines)
+                                        
                                         rel_orientation=self.get_relative_orientation(orientation,line_slope)
-                                        
-                                        self.testorientation.append(rel_orientation)
-                                        id_or=(len(self.testorientation))
-                                        relative_orientations=np.asarray(self.testorientation)
-                                        orient_diff=abs(np.diff(relative_orientations))
-                                        orient_mask=orient_diff<2
-                                        
-                                else:
-                                    rospy.logwarn("no goal")
-                                
-                                
-                                
-                                    
-                                
-            ########### near block#####################################            
-                        elif block_dist<3.5:
-                        
-                            crosslines,poly0=self.nearblock_get_crosslines(free_space)           
-                            mpoints=self.nearblock_get_intersectpoints(crosslines)
-                            if len(mpoints)>2:
-                                endline,dist=self.nearblock_get_endline(mpoints,free_space,poly0,miny,maxy)
-                                x_int_points,y_int_points,poly0_cross=self.nearblock_offset_endline(endline,dist,free_space)
-                                right_sideline,left_sideline=self.nearblock_side_lines(poly0_cross,x_int_points,y_int_points)
-
-                                if type(left_sideline) is sg.linestring.LineString and type(right_sideline) is sg.linestring.LineString and type(endline) is sg.linestring.LineString: 
-
-                                    left_side,right_side=self.get_polygon_sides(left_sideline,right_sideline)
-
-                                    offseted_endline=endline.parallel_offset(1.5)
-                                    xe,ye=offseted_endline.xy
-                                    xl0,yl0=poly0.xy
-                                    end_line=np.column_stack((xe,ye))
-                                    endline_left=np.column_stack((xl0,yl0))
-
-                                    slope_left,intercept_left=self.lineEquations(left_side)
-                                    slope_right,intercept_right=self.lineEquations(right_side)
-                                    slope_end_r,intercept_end_r=self.lineEquations(end_line)
-                                    slope_end_l,intercept_end_l=self.lineEquations(endline_left)
-
-                                    left_upperP_x,left_upperP_y,right_upperP_x,right_upperP_y=self.nearblock_get_polygon(right_sideline,left_sideline,offseted_endline)
-                                    left_upperP_x=np.array(left_upperP_x)
-                                    left_upperP_y=np.array(left_upperP_y)
-                                    right_upperP_x=np.array(right_upperP_x)
-                                    right_upperP_y=np.array(right_upperP_y)
-                                    x_int_points=np.array(x_int_points)
-                                    y_int_points=np.array(y_int_points)
-                                
-                                    left_sideNB=sg.LineString([(x_int_points[1],y_int_points[1]),(left_upperP_x,left_upperP_y)])
-                                    right_sideNB=sg.LineString([(right_upperP_x,right_upperP_y),(x_int_points[0],y_int_points[0])])
-
-                                    smaller_polygon=self.get_polygon(left_sideNB,right_sideNB)
-
-                                    originalpoints=self.original_points()
-                                    maskedpoints=self.get_maskedpoints(slope_left,slope_right,intercept_left,intercept_right,intercept_end_r,intercept_end_l,slope_end_r,slope_end_l,originalpoints)
-                                    
-                                    
-                                    
-
-                                    if len(maskedpoints)>3:
-                                        block=sg.LineString(maskedpoints)
-                                        block=block.simplify(0.5,preserve_topology=False)
-                                        lines,block_slopes=self.get_slope(block)               
-                                        vertical=self.nearblock_verical_or_horizontal(block_slopes,slope_end_r,slope_left)
-                                        block_lines=lines[vertical]
-                                        
-                                        
-                                        
-                                        if np.any(block_lines) and block_lines.shape[0]>0 and len(block_lines.shape) < 4 :
-                                            line_length,block_point,xcenter,ycenter=self.block_linesCoordinate(block_lines)
-                                            xblock,yblock=block_point.xy
-                                        
+                                        if line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance:
+                                            rel_orientation=self.get_relative_orientation(orientation,line_slope)
                                             
-                                            line_slope=self.get_block_lines_slopes(block_lines)                                            
-                                            if line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance:
-                                                rel_orientation=self.get_relative_orientation(orientation,line_slope)
-                                                self.testorientation.append(rel_orientation)
-                                                                                    
-                                                id_or=(len(self.testorientation))
-                                                relative_orientations=np.asarray(self.testorientation)
-                                                orient_diff=abs(np.diff(relative_orientations))
-
-                                                orient_mask=orient_diff<2
-                                                
-                                        else:
-                                            rospy.logwarn("no goal")
+                                            self.testorientation.append(rel_orientation)
+                                            id_or=(len(self.testorientation))
+                                            relative_orientations=np.asarray(self.testorientation)
+                                            orient_diff=abs(np.diff(relative_orientations))
+                                            orient_mask=orient_diff<2
+                                            
+                                    else:
+                                        rospy.logwarn("no goal")
+                                    
+                                    
+                                    
                                         
                                     
+                ########### near block#####################################            
+                            elif block_dist<3.5 and block_dist>1.5:
+                            
+                                crosslines,poly0=self.nearblock_get_crosslines(free_space)           
+                                mpoints=self.nearblock_get_intersectpoints(crosslines)
+                                if len(mpoints)>2:
+                                    endline,dist=self.nearblock_get_endline(mpoints,free_space,poly0,miny,maxy)
+                                    x_int_points,y_int_points,poly0_cross=self.nearblock_offset_endline(endline,dist,free_space)
+                                    right_sideline,left_sideline=self.nearblock_side_lines(poly0_cross,x_int_points,y_int_points)
+
+                                    if type(left_sideline) is sg.linestring.LineString and type(right_sideline) is sg.linestring.LineString and type(endline) is sg.linestring.LineString: 
+
+                                        left_side,right_side=self.get_polygon_sides(left_sideline,right_sideline)
+
+                                        offseted_endline=endline.parallel_offset(1.5)
+                                        xe,ye=offseted_endline.xy
+                                        xl0,yl0=poly0.xy
+                                        end_line=np.column_stack((xe,ye))
+                                        endline_left=np.column_stack((xl0,yl0))
+
+                                        slope_left,intercept_left=self.lineEquations(left_side)
+                                        slope_right,intercept_right=self.lineEquations(right_side)
+                                        slope_end_r,intercept_end_r=self.lineEquations(end_line)
+                                        slope_end_l,intercept_end_l=self.lineEquations(endline_left)
+
+                                        left_upperP_x,left_upperP_y,right_upperP_x,right_upperP_y=self.nearblock_get_polygon(right_sideline,left_sideline,offseted_endline)
+                                        left_upperP_x=np.array(left_upperP_x)
+                                        left_upperP_y=np.array(left_upperP_y)
+                                        right_upperP_x=np.array(right_upperP_x)
+                                        right_upperP_y=np.array(right_upperP_y)
+                                        x_int_points=np.array(x_int_points)
+                                        y_int_points=np.array(y_int_points)
+                                    
+                                        left_sideNB=sg.LineString([(x_int_points[1],y_int_points[1]),(left_upperP_x,left_upperP_y)])
+                                        right_sideNB=sg.LineString([(right_upperP_x,right_upperP_y),(x_int_points[0],y_int_points[0])])
+
+                                        smaller_polygon=self.get_polygon(left_sideNB,right_sideNB)
+
+                                        originalpoints=self.original_points()
+                                        maskedpoints=self.get_maskedpoints(slope_left,slope_right,intercept_left,intercept_right,intercept_end_r,intercept_end_l,slope_end_r,slope_end_l,originalpoints)
+                                        
+                                        
+                                        
+
+                                        if len(maskedpoints)>3:
+                                            block=sg.LineString(maskedpoints)
+                                            block=block.simplify(0.5,preserve_topology=False)
+                                            lines,block_slopes=self.get_slope(block)               
+                                            vertical=self.nearblock_verical_or_horizontal(block_slopes,slope_end_r,slope_left)
+                                            block_lines=lines[vertical]
+                                            
+                                            
+                                            
+                                            if np.any(block_lines) and block_lines.shape[0]>0 and len(block_lines.shape) < 4 :
+                                                line_length,block_point,xcenter,ycenter=self.block_linesCoordinate(block_lines)
+                                                xblock,yblock=block_point.xy
+                                            
+                                                
+                                                line_slope=self.get_block_lines_slopes(block_lines)                                            
+                                                if line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance:
+                                                    rel_orientation=self.get_relative_orientation(orientation,line_slope)
+                                                    self.testorientation.append(rel_orientation)
+                                                                                        
+                                                    id_or=(len(self.testorientation))
+                                                    relative_orientations=np.asarray(self.testorientation)
+                                                    orient_diff=abs(np.diff(relative_orientations))
+
+                                                    orient_mask=orient_diff<2
+                                                    
+                                            else:
+                                                rospy.logwarn("no goal")
+                                            
+                                        
 
     def find_orientation(self, p):
         intersect_x = np.arange(0.1, 3, 0.4)
@@ -765,7 +766,7 @@ def linepub():
             
             mark_e.points=[]
             if id_or > 1:
-                if orient_mask[id_or-2]==True:
+                if orient_mask[id_or-2]==True  or orient_mask[id_or-3]==False and orient_mask[id_or-2]==False :
 
                     if smaller_polygon is not None and smaller_polygon is not [] and block_dist >-1:
                         for s in smaller_polygon.exterior.coords:
