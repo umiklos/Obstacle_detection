@@ -159,7 +159,7 @@ class ScanSubscriber():
                                                                             
                                         line_slope=self.get_block_lines_slopes(block_lines)
                                         
-                                        rel_orientation=self.get_relative_orientation(orientation,line_slope)
+                                        
                                         if line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance:
                                             rel_orientation=self.get_relative_orientation(orientation,line_slope)
                                             
