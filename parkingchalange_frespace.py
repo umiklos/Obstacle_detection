@@ -13,6 +13,8 @@ from shapely.geometry import Point
 from sklearn import linear_model
 from scipy import stats
 import math
+#from tf.transformations import quaternion_from_euler
+from scipy.spatial.transform import Rotation as R
 
 
 
@@ -38,6 +40,7 @@ ycenter=None
 centerpoint=None
 id_or=0
 orient_mask=None
+rot=None
 
 
 
@@ -56,7 +59,7 @@ class ScanSubscriber():
         self.testorientation=[]
 
     def scanCallBack(self,msg):
-        global free_space, orient_line, closest_node,search_pol,right_sideline,left_sideline,smaller_polygon,block_point,block_dist,h_cent,line_length,yblock,xblock,xcenter,ycenter,offset_from_block,block_length,block_length_tolerance,id_or,orient_mask
+        global free_space, orient_line, closest_node,search_pol,right_sideline,left_sideline,smaller_polygon,block_point,block_dist,h_cent,line_length,yblock,xblock,xcenter,ycenter,offset_from_block,block_length,block_length_tolerance,id_or,orient_mask,rot
         # define the slices ~ how many nodes (points) a polygon will have (don't worry later will be simlified with shapely simplify)
         slic = 40
         if len(self.angles) < 1: # if empty
@@ -74,6 +77,8 @@ class ScanSubscriber():
         r = self.masked_ranges[m]
         x = r * np.cos(a)
         y = r * np.sin(a)
+        
+        
         free_space = sg.Polygon(np.column_stack((x, y)))
         if free_space.is_valid:
         # here the polygon will be simplified, from 40 node down to 4-7 if the barriers are in a rectangular shape
@@ -100,6 +105,7 @@ class ScanSubscriber():
                     orient_line = sg.Polygon(list(middle_coords))
                     closest_node = block_dist #min(free_sp_dist)
                     orient_lineLs=sg.LineString(middle_coords)
+
                     
                     self.testvalue.append(block_dist)
                     id=len(self.testvalue)
@@ -156,8 +162,11 @@ class ScanSubscriber():
                                     if np.any(block_lines) and block_lines.shape[0]>0 and len(block_lines.shape) < 4 :                            
                                         line_length,block_point,xcenter,ycenter=self.block_linesCoordinate(block_lines)
                                         xblock,yblock=block_point.xy
-                                                                            
+                                                                         
                                         line_slope=self.get_block_lines_slopes(block_lines)
+
+                                        
+                                        rot=self.get_new_orientation(line_slope)
                                         
                                         
                                         if line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance:
@@ -232,9 +241,13 @@ class ScanSubscriber():
                                             if np.any(block_lines) and block_lines.shape[0]>0 and len(block_lines.shape) < 4 :
                                                 line_length,block_point,xcenter,ycenter=self.block_linesCoordinate(block_lines)
                                                 xblock,yblock=block_point.xy
-                                            
+                            
                                                 
-                                                line_slope=self.get_block_lines_slopes(block_lines)                                            
+                                                line_slope=self.get_block_lines_slopes(block_lines)
+
+                                               
+                                                rot=self.get_new_orientation(line_slope)
+                                                                                         
                                                 if line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance:
                                                     rel_orientation=self.get_relative_orientation(orientation,line_slope)
                                                     self.testorientation.append(rel_orientation)
@@ -609,7 +622,8 @@ class ScanSubscriber():
         newy1=block_lines[0,0,1]
         newy2=block_lines[0,1,1]
         slope,_,_,_,_= stats.linregress([newx1,newx2],[newy1,newy2])
-        slope=math.radians(slope)
+        slope=math.atan(slope)
+        #slope=math.radians(slope)
         return slope
 
     def get_relative_orientation(self,orientation,line_slope):
@@ -618,6 +632,14 @@ class ScanSubscriber():
         rel_orientation=math.degrees(rel_orientation)
         return rel_orientation
 
+    def get_new_orientation(self,line_slope):
+        if line_slope< 0:
+            new_orient=line_slope+(math.pi/2)
+        else:
+            new_orient=line_slope-(math.pi/2) 
+
+        rot=R.from_euler('z',new_orient)
+        return rot
 
 def linepub(): 
     rospy.init_node("rviz_marker", anonymous=True)
@@ -634,10 +656,10 @@ def linepub():
     pub_side = rospy.Publisher("side_points", vismsg.Marker, queue_size=1)
     pub_poly = rospy.Publisher("smaller_poly", vismsg.Marker, queue_size=1)
     pub_blockp=rospy.Publisher("wall", vismsg.Marker, queue_size=1)
-    pub_centerpointb=rospy.Publisher("goalpoint/xy", geomsg.PointStamped, queue_size=1)
+    pub_centerpointb=rospy.Publisher("goalpoint", vismsg.Marker, queue_size=1)
     #pub_centerpoint_map=rospy.Publisher("goalpoint/map", geomsg.PointStamped, queue_size=1)
     
-    rate=rospy.Rate(25)
+    rate=rospy.Rate(50)
     #tfBuffer = tf2_ros.Buffer()
     #listener = tf2_ros.TransformListener(tfBuffer)
 
@@ -781,14 +803,27 @@ def linepub():
                     else:
                         rospy.logwarn("no wall found")
                     """
-                    if ycenter is not None and xcenter is not None and block_point is not None and block_point is not [] and line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance and block_dist >-1:
+                    if ycenter is not None and xcenter is not None and block_point is not None and block_point is not [] and line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance and block_dist >-1 and rot is not None:
                         
                         
-                        mark_d = geomsg.PointStamped()
-                        mark_d.header.frame_id = "laser"
-                        mark_d.point.x = xcenter[0]-offset_from_block
-                        mark_d.point.y = ycenter[0]
-                        mark_d.point.z = 0.0
+                        mark_d = vismsg.Marker()
+                        mark_d.header.frame_id = "/laser"
+                        mark_d.type = mark_d.SPHERE
+                        mark_d.action = mark_d.ADD
+                        mark_d.pose.position.x=xcenter[0]-offset_from_block
+                        mark_d.pose.position.y=ycenter[0]
+                        mark_d.pose.position.z=0.0
+                        mark_d.pose.orientation.x=rot.as_quat()[0]
+                        mark_d.pose.orientation.y=rot.as_quat()[1]
+                        mark_d.pose.orientation.z=rot.as_quat()[2]
+                        mark_d.pose.orientation.w=rot.as_quat()[3]
+                        mark_d.scale.x = mark_d.scale.y=mark_d.scale.z=0.5
+                    
+                        mark_d.color.r = 0.9
+                        mark_d.color.g = 1
+                        mark_d.color.b = 0.4
+                        mark_d.color.a = 0.9 # 90% visibility
+                        
                         pub_centerpointb.publish(mark_d)
                     """    
                     else:
