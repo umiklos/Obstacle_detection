@@ -13,8 +13,12 @@ from shapely.geometry import Point
 from sklearn import linear_model
 from scipy import stats
 import math
-#from tf.transformations import quaternion_from_euler
+import tf2_ros
+import tf2_geometry_msgs
+
 from scipy.spatial.transform import Rotation as R
+
+
 
 
 
@@ -41,6 +45,8 @@ centerpoint=None
 id_or=0
 orient_mask=None
 rot=None
+drivable_place=None
+#trans=None
 
 
 
@@ -57,9 +63,25 @@ class ScanSubscriber():
         self.separators = []
         self.testvalue = []
         self.testorientation=[]
+        self.current_pose_x=[]
+        self.current_pose_y=[]
+
+    
+    def gpsCallback(self,msg):
+        #self.gps_x=msg.pose.position.x
+        self.current_pose_x.append(msg.pose.position.x)
+        self.current_pose_y.append(msg.pose.position.y)
+        if len(self.current_pose_x)>1 and len(self.current_pose_y)>1:
+            for i in range(1,len(self.current_pose_x)):
+                previous_pose_x=self.current_pose_x[i-1]
+                previous_pose_y=self.current_pose_y[i-1]
+                self.diff_x=self.current_pose_x[i]-previous_pose_x
+                self.diff_y=self.current_pose_y[i]-previous_pose_y
+        
+
 
     def scanCallBack(self,msg):
-        global free_space, orient_line, closest_node,search_pol,right_sideline,left_sideline,smaller_polygon,block_point,block_dist,h_cent,line_length,yblock,xblock,xcenter,ycenter,offset_from_block,block_length,block_length_tolerance,id_or,orient_mask,rot
+        global free_space, orient_line, closest_node,search_pol,right_sideline,left_sideline,smaller_polygon,block_point,block_dist,h_cent,line_length,yblock,xblock,xcenter,ycenter,offset_from_block,block_length,block_length_tolerance,id_or,orient_mask,rot,drivable_place #trans
         # define the slices ~ how many nodes (points) a polygon will have (don't worry later will be simlified with shapely simplify)
         slic = 40
         if len(self.angles) < 1: # if empty
@@ -98,6 +120,9 @@ class ScanSubscriber():
             if free_space is not None and free_space is not []:
                 #free_sp_dist = self.dist_poly(free_space) # distances of the simplyfied free space
                 minx,miny,maxx,maxy=self.get_bounds(free_space)
+
+
+                xf,yf=free_space.exterior.xy
                 if maxx>1:
                     h_cent, orientation = self.find_orientation(free_space)
                     block_dist = self.find_block_distance(h_cent, orientation, free_space)
@@ -105,6 +130,7 @@ class ScanSubscriber():
                     orient_line = sg.Polygon(list(middle_coords))
                     closest_node = block_dist #min(free_sp_dist)
                     orient_lineLs=sg.LineString(middle_coords)
+                    
 
                     
                     self.testvalue.append(block_dist)
@@ -123,15 +149,19 @@ class ScanSubscriber():
                                 crosslines,middle_line=self.cross_lines(free_space,h_cent,orientation,orient_lineLs)
                                 mpoints=self.get_mpoints(crosslines)
                                 left_distances,right_distances=self.getSides(middle_line,mpoints)
+
                                 left_distance=self.get_offset(left_distances)
                                 right_distance=self.get_offset(right_distances)
                                 left_side_line=sg.LineString(middle_line.parallel_offset(left_distance-0.5,'left'))
                                 right_side_line=sg.LineString(middle_line.parallel_offset(right_distance-0.5))  
-                                
+                                left_driveable_line=sg.LineString(orient_lineLs.parallel_offset(left_distance-0.5,'left'))
+                                right_drivable_line=sg.LineString(orient_lineLs.parallel_offset(right_distance-0.5))
+
                                 left_side,right_side=self.get_polygon_sides(left_side_line,right_side_line)
                                 search_pol=self.get_polygon(left_side,right_side)
                                 endline=self.get_endline(left_side_line,right_side_line)
-
+                                left_drivable,right_drivable=self.get_polygon_sides(left_driveable_line,right_drivable_line)
+                                drivable_place=self.get_polygon(left_drivable,right_drivable)
                                 
                                 xe,ye=endline.xy
                                 end_line=np.column_stack((xe,ye))
@@ -157,6 +187,8 @@ class ScanSubscriber():
                                     lines,block_slopes=self.get_slope(block)       
                                     vertical=self.verical_or_horizontal(block_slopes,orientation)
                                     block_lines=lines[vertical]
+
+                                    
                                                                 
                                 
                                     if np.any(block_lines) and block_lines.shape[0]>0 and len(block_lines.shape) < 4 :                            
@@ -236,7 +268,7 @@ class ScanSubscriber():
                                             vertical=self.nearblock_verical_or_horizontal(block_slopes,slope_end_r,slope_left)
                                             block_lines=lines[vertical]
                                             
-                                            
+                                            #print(block_lines)
                                             
                                             if np.any(block_lines) and block_lines.shape[0]>0 and len(block_lines.shape) < 4 :
                                                 line_length,block_point,xcenter,ycenter=self.block_linesCoordinate(block_lines)
@@ -643,12 +675,15 @@ class ScanSubscriber():
 
 def linepub(): 
     rospy.init_node("rviz_marker", anonymous=True)
-    arr = [] 
-    arr2=[] 
+     
+    arr,arr2,arr3,arr4=[],[],[],[] 
     sc=ScanSubscriber()
     sc.testvalue = arr
-    sc.testorientation=arr2   
+    sc.testorientation=arr2  
+    sc.current_pose_x=arr3
+    sc.current_pose_y=arr4 
     rospy.Subscriber("/scan", senmsg.LaserScan, sc.scanCallBack)
+    rospy.Subscriber("/gps/current_pose",geomsg.PoseStamped,sc.gpsCallback)
     
     pub_free = rospy.Publisher("free_space_polygon", vismsg.Marker, queue_size=1)
     pub_text = rospy.Publisher("free_space_text", vismsg.Marker, queue_size=1)
@@ -656,12 +691,15 @@ def linepub():
     pub_side = rospy.Publisher("side_points", vismsg.Marker, queue_size=1)
     pub_poly = rospy.Publisher("smaller_poly", vismsg.Marker, queue_size=1)
     pub_blockp=rospy.Publisher("wall", vismsg.Marker, queue_size=1)
-    pub_centerpointb=rospy.Publisher("goalpoint", vismsg.Marker, queue_size=1)
-    #pub_centerpoint_map=rospy.Publisher("goalpoint/map", geomsg.PointStamped, queue_size=1)
+    pub_centerpointb=rospy.Publisher("goalpoint", geomsg.PoseStamped, queue_size=1)
+    pub_drive=rospy.Publisher("drivable_space",vismsg.Marker,queue_size=1)
+    pub_centerpoint_map=rospy.Publisher("goalpoint/map", geomsg.PoseStamped, queue_size=1)
     
     rate=rospy.Rate(50)
-    #tfBuffer = tf2_ros.Buffer()
-    #listener = tf2_ros.TransformListener(tfBuffer)
+    tfBuffer = tf2_ros.Buffer()
+    listener = tf2_ros.TransformListener(tfBuffer)
+
+    
 
 
     # mark_f - free space marker
@@ -704,6 +742,19 @@ def linepub():
     mark_w.pose.orientation.w = 1.0
     mark_w.pose.position.x = mark_w.pose.position.y = mark_w.pose.position.z = 0.0
 
+    mark_dr = vismsg.Marker()
+    mark_dr.header.frame_id = "/laser"
+    mark_dr.type = mark_dr.LINE_STRIP
+    mark_dr.action = mark_dr.ADD
+    mark_dr.scale.x = 0.2
+    mark_dr.color.r = 0.9
+    mark_dr.color.g = 0.2
+    mark_dr.color.b = 0.1
+    mark_dr.color.a = 0.9 # 90% visibility
+    mark_dr.pose.orientation.x = mark_dr.pose.orientation.y = mark_dr.pose.orientation.z = 0.0
+    mark_dr.pose.orientation.w = 1.0
+    mark_dr.pose.position.x = mark_dr.pose.position.y = mark_dr.pose.position.z = 0.0
+
     
     # mark_s - sidepoint space marker
     mark_s = vismsg.Marker()
@@ -737,6 +788,7 @@ def linepub():
     # mark_e - endpoint space marker
     mark_e = vismsg.Marker()
     mark_e.header.frame_id = "/laser"
+    
     mark_e.type = mark_e.LINE_STRIP
     mark_e.action = mark_e.ADD
     mark_e.scale.x = 0.2
@@ -748,11 +800,26 @@ def linepub():
     mark_e.pose.orientation.w = 1.0
     mark_e.pose.position.x = mark_e.pose.position.y = mark_e.pose.position.z = 0.0
 
-
+    #trans=None
+    #mark_d=None
     
 
     while not rospy.is_shutdown():
-        if free_space is not None:
+        
+        try:
+            trans = tfBuffer.lookup_transform('map', 'laser', rospy.Time.now(),rospy.Duration(1.0))
+            #print(trans)
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException):
+            rate.sleep()
+            continue
+        
+        
+
+        if free_space is not None :
+            
+            
+            
+            
             # marker line points
             mark_f.points = []
             pl1 = geomsg.Point(); pl1.x = -0.2; pl1.y = -1.0; pl1.z = 0.0  # x an y mismatch?
@@ -782,13 +849,20 @@ def linepub():
                     p = geomsg.Point(); p.x = s[0]; p.y = s[1]; p.z = 0.0
                     mark_s.points.append(p)
 
-            mark_sm.points=[]        
+            mark_dr.points=[]        
+            if drivable_place is not None and drivable_place is not []:
+                for s in drivable_place.exterior.coords:
+                    p = geomsg.Point(); p.x = s[0]; p.y = s[1]; p.z = 0.0
+                    mark_dr.points.append(p)
             
-            
-            
+            mark_sm.points=[]
             mark_e.points=[]
+
+            #print(type(mark_d))
             if id_or > 1:
                 if orient_mask[id_or-2]==True  or orient_mask[id_or-3]==False and orient_mask[id_or-2]==False :
+
+                    
 
                     if smaller_polygon is not None and smaller_polygon is not [] and block_dist >-1:
                         for s in smaller_polygon.exterior.coords:
@@ -796,20 +870,19 @@ def linepub():
                             mark_sm.points.append(p)
 
                     if block_point is not None and block_point is not [] and line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance and block_dist >-1:
+                        mark_e.header.stamp=rospy.Time.now()
                         for e in range(2):
                             p = geomsg.Point(); p.x = xblock[e]; p.y = yblock[e]; p.z = 0.0
                             mark_e.points.append(p)
-                    """        
-                    else:
-                        rospy.logwarn("no wall found")
-                    """
+                    
                     if ycenter is not None and xcenter is not None and block_point is not None and block_point is not [] and line_length<block_length+block_length_tolerance and line_length>block_length-block_length_tolerance and block_dist >-1 and rot is not None:
                         
+                          
                         
-                        mark_d = vismsg.Marker()
+                        mark_d = geomsg.PoseStamped()
                         mark_d.header.frame_id = "/laser"
-                        mark_d.type = mark_d.SPHERE
-                        mark_d.action = mark_d.ADD
+                        mark_d.header.stamp=rospy.Time.now()
+                        
                         mark_d.pose.position.x=xcenter[0]-offset_from_block
                         mark_d.pose.position.y=ycenter[0]
                         mark_d.pose.position.z=0.0
@@ -817,27 +890,19 @@ def linepub():
                         mark_d.pose.orientation.y=rot.as_quat()[1]
                         mark_d.pose.orientation.z=rot.as_quat()[2]
                         mark_d.pose.orientation.w=rot.as_quat()[3]
-                        mark_d.scale.x = mark_d.scale.y=mark_d.scale.z=0.5
-                    
-                        mark_d.color.r = 0.9
-                        mark_d.color.g = 1
-                        mark_d.color.b = 0.4
-                        mark_d.color.a = 0.9 # 90% visibility
+                        
                         
                         pub_centerpointb.publish(mark_d)
-                    """    
                     else:
-                        rospy.logwarn("no centerpoint")
-
-                       
-                        try:
-                            target_pt = tfBuffer.transform(mark_d, "map")
-                            pub_centerpoint_map.publish(target_pt)
-                        except:
-                            continue
-                        """           
+                        mark_d=None    
+                        
                     
-
+                    if mark_d is not None: 
+                        target_pt=tf2_geometry_msgs.do_transform_pose(mark_d, trans)    
+                        pub_centerpoint_map.publish(target_pt)
+                    
+                
+                    
             
             
             # Publish the Markers
@@ -847,6 +912,8 @@ def linepub():
             pub_side.publish(mark_s)
             pub_poly.publish(mark_sm)
             pub_blockp.publish(mark_e)
+            pub_drive.publish(mark_dr)
+            
             
             
         rate.sleep()
